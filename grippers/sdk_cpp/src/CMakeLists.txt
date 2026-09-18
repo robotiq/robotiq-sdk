@@ -9,6 +9,7 @@ target_sources(grippers_objects PRIVATE
   logger.cpp
   to_string.cpp
   units.cpp
+  detail/range.hpp
   modbus_client.cpp
   wait.cpp
 )
