@@ -13,6 +13,7 @@ DEPENDENCIES.md
 
 .venv/
 .idea/
+__pycache__/
 
 # dev/ IDE aggregate: its build tree and per-user IDE state.
 /build/
