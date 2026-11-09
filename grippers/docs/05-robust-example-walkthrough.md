@@ -13,9 +13,9 @@ robust version and why.
 
 <!-- snippet: move_gripper.cpp argument-handling -->
 ```cpp
-if(argc < 2)
+if(argc < 2 || argc > 4)
 {
-   std::cerr << "Usage: " << argv[0] << " <port> [baudrate]\n";
+   printUsage(argv[0]);
    return EXIT_FAILURE;
 }
 ```
@@ -44,6 +44,42 @@ if(parsed < kMinBaudrate || parsed > kMaxBaudrate)
 
 The lower bound matters: `std::stoul("-1")` doesn't throw — it silently
 wraps to a huge unsigned value that the `< kMinBaudrate` check catches.
+
+The last argument names the gripper, one of the profiles the SDK ships:
+
+<!-- snippet: move_gripper.cpp model-profiles -->
+```cpp
+constexpr std::array<std::pair<std::string_view, DeviceProfile>, 5> kProfiles{{
+   {"2f85", Robotiq::profiles::k2F85},
+   {"2f140", Robotiq::profiles::k2F140},
+   {"hande", Robotiq::profiles::kHandE},
+   {"hande_100", Robotiq::profiles::kHandE100},
+   {"hande_c10", Robotiq::profiles::kHandEC10},
+}};
+```
+
+Without it the example drives a 2F-85; an unknown name prints the usage
+and stops:
+
+<!-- snippet: move_gripper.cpp model-selection -->
+```cpp
+DeviceProfile profile = Robotiq::profiles::k2F85;
+if(argc > 3)
+{
+   const auto named =
+      std::find_if(kProfiles.begin(), kProfiles.end(), [&](const auto& entry) { return entry.first == argv[3]; });
+   if(named == kProfiles.end())
+   {
+      std::cerr << "Unknown model '" << argv[3] << "'\n";
+      printUsage(argv[0]);
+      return EXIT_FAILURE;
+   }
+   profile = named->second;
+}
+```
+
+Every conversion below takes that profile: the speed is its full scale,
+and the moves go to its fully open and fully closed openings.
 
 ## Reporting a failed connection
 
@@ -129,7 +165,7 @@ In `main()`, the speed and force conversions are checked before use:
 
 <!-- snippet: move_gripper.cpp speed-optional-check -->
 ```cpp
-const std::optional<uint8_t> speed = Robotiq::units::speedToRegister(kSpeed, k2F85);
+const std::optional<uint8_t> speed = Robotiq::units::speedToRegister(profile.maxSpeed, profile);
 const std::optional<uint8_t> force = Robotiq::units::effortToRegister(kEffort);
 if(!speed || !force)
 {
