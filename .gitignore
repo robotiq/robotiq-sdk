@@ -19,3 +19,4 @@ DEPENDENCIES.md
 /dev/CMakeUserPresets.json
 /dev/.qtcreator/
 /dev/*.user
+/dev/.vscode/

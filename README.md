@@ -13,7 +13,7 @@ Public SDKs, quickstart tools and firmware utilities for Robotiq products, one f
 
 Each product folder has its own README with requirements, build steps and quickstart commands.
 
-To work on every C++ SDK at once, open [dev/CMakeLists.txt](dev/CMakeLists.txt) in your IDE with its `ide` preset. It is a developer convenience only: each SDK still builds on its own.
+To work on every C++ SDK at once, open [dev/CMakeLists.txt](dev/CMakeLists.txt) in your IDE with its `ide` preset. It is a developer convenience only: each SDK still builds on its own. Without libserialport, it skips the TSF SDK.
 
 ## Versioning
 

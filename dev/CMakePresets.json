@@ -1,5 +1,5 @@
 {
-  "version": 4,
+  "version": 3,
   "configurePresets": [
     {
       "name": "ide",
@@ -8,7 +8,7 @@
       "binaryDir": "${sourceDir}/../build/ide",
       "installDir": "${sourceDir}/../build/ide/prefix",
       "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
       }
     }
