@@ -9,7 +9,7 @@ Public SDKs, quickstart tools and firmware utilities for Robotiq products, one f
 | Folder | Product | Status |
 |--------|---------|--------|
 | [tsf/](tsf/) | TSF-85 tactile sensor: C++ SDK, Python quick-connect and web viewer, firmware flashing tool, device setup utilities | available |
-| [grippers/](grippers/) | 2F-85, 2F-140, Hand-E and Hand-E C10 grippers: C++ SDK, for Linux, Windows, macOS and freestanding/RTOS targets | available |
+| [grippers/](grippers/) | 2F-85, 2F-140, Hand-E, Hand-E 100 and Hand-E C10 grippers: C++ SDK, for Linux, Windows, macOS and freestanding/RTOS targets | available |
 
 Each product folder has its own README with requirements, build steps and quickstart commands.
 
