@@ -17,11 +17,12 @@ namespace Robotiq {
 //! back, then command rPR 255 and read gPO back. Do this on your own
 //! gripper when filling a new profile, especially with custom fingers.
 //!
-//! \warning Position <-> register conversion are valid only while
-//!          the gripper stays in parallel-finger mode. In encompassing
-//!          mode gPO can go past closedPosition; this profile has no way
-//!          to represent that, so a reading taken in encompassing mode
-//!          does not convert to a meaningful opening.
+//! \warning On the 2F grippers, position <-> register conversion are
+//!          valid only while the gripper stays in parallel-finger mode.
+//!          In encompassing mode gPO can go past closedPosition; this
+//!          profile has no way to represent that, so a reading taken in
+//!          encompassing mode does not convert to a meaningful opening.
+//!          The Hand-E family has no encompassing mode.
 //!
 //! \warning minOpening, maxOpening, openPosition and closedPosition
 //!          depend on which fingers are installed on the gripper:
@@ -61,9 +62,15 @@ inline constexpr DeviceProfile k2F140{0.030, 0.250, 0.0, 0.140, 3, 230};
 
 //! \ingroup units
 //! \brief The measured profile for the Hand-E
-//!
-//! \warning Assumes that the gripper is in parallel-finger mode.
 inline constexpr DeviceProfile kHandE{0.020, 0.150, 0.0, 0.050, 3, 250};
+
+//! \ingroup units
+//! \brief The measured profile for the Hand-E 100 (100 mm stroke)
+//!
+//! Same speed range as the Hand-E (product sheet: 20 to 150 mm/s) over twice
+//! the stroke. Register endpoints measured on a Hand-E 100: 3 and 250, the
+//! Hand-E's band, so one count is about 0.4 mm of opening.
+inline constexpr DeviceProfile kHandE100{0.020, 0.150, 0.0, 0.100, 3, 250};
 
 //! \ingroup units
 //! \brief The measured profile for the Hand-E C10
