@@ -64,9 +64,17 @@ Grip an object as follows:
   energy and use the impact force to secure the object.
 - Use a force parameter above 0 when committing to a grip on an object, so
   that the Re-grasp function is enabled.
-- Use maximum force and maximum speed to release an object. Significant
-  force can be applied to the gripper mechanism during a grip, so high
-  force and speed parameters are needed for a proper release.
+- To release an object — that is, to reverse the motion after an object
+  has been detected — use maximum force and maximum speed, and send a
+  single position command about 5 mm out of the grip (roughly 13 counts on
+  a 2F-85: lower for an external grip, higher for an internal one).
+  Significant force can be applied to the gripper mechanism during a grip,
+  so high force and speed parameters are needed for a proper release.
+- Do not interrupt a release. Wait for the gripper to reach the release
+  position before sending any other position command. If the release
+  motion is interrupted, the gripper may not complete it at maximum speed
+  and force: it then tries to move out of the grip with low speed and
+  force, and can stay stuck in the grip position.
 
 ## Grip force
 
