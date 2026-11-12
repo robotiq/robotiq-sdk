@@ -37,7 +37,8 @@ constexpr unsigned long kMinBaudrate = 1;
 constexpr unsigned long kMaxBaudrate = 1000000;
 //! [baudrate-bounds]
 
-// The third argument names one of the profiles the SDK ships.
+// The third argument names one of the profiles the SDK ships; the first
+// entry is the default.
 //! [model-profiles]
 constexpr std::array<std::pair<std::string_view, DeviceProfile>, 5> kProfiles{{
    {"2f85", Robotiq::profiles::k2F85},
@@ -54,7 +55,12 @@ constexpr double kEffort = 1.0; // maximum grip effort
 void printUsage(const char* program)
 {
    std::cerr << "Usage: " << program << " <port> [baudrate] [model]\n"
-             << "  model: 2f85 (default), 2f140, hande, hande_100 or hande_c10\n";
+             << "  model: " << kProfiles.front().first << " (default)";
+   for(auto entry = kProfiles.begin() + 1; entry != kProfiles.end(); ++entry)
+   {
+      std::cerr << ", " << entry->first;
+   }
+   std::cerr << '\n';
 }
 } // namespace
 
@@ -97,7 +103,7 @@ int main(int argc, char* argv[])
    }
 
    //! [model-selection]
-   DeviceProfile profile = Robotiq::profiles::k2F85;
+   DeviceProfile profile = kProfiles.front().second;
    if(argc > 3)
    {
       const auto named =

@@ -58,12 +58,12 @@ constexpr std::array<std::pair<std::string_view, DeviceProfile>, 5> kProfiles{{
 }};
 ```
 
-Without it the example drives a 2F-85; an unknown name prints the usage
-and stops:
+Without it the example drives the first entry, a 2F-85; an unknown
+name prints the usage, built from the same table, and stops:
 
 <!-- snippet: move_gripper.cpp model-selection -->
 ```cpp
-DeviceProfile profile = Robotiq::profiles::k2F85;
+DeviceProfile profile = kProfiles.front().second;
 if(argc > 3)
 {
    const auto named =
