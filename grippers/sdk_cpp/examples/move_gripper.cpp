@@ -5,25 +5,29 @@
 //! Runtime-mode example — the way to control a gripper with this SDK.
 //! The gripper's fingers move (activation sweep, open, close): keep the
 //! jaws clear.
-//! Usage: move_gripper <port> [baudrate]
+//! Usage: move_gripper <port> [baudrate] [model]
 
+#include <algorithm> // std::find_if over the profile table
+#include <array> // the table of shipped profiles below
 #include <cstdlib> // EXIT_SUCCESS / EXIT_FAILURE, main()'s return codes below — unrelated to Gripper itself
 #include <memory> // smart pointers: std::unique_ptr to own the Gripper, std::shared_ptr for the Logger it takes
 #include <optional> // std::optional from the unit-conversion functions below
 #include <iostream> // std::cerr for usage errors
 #include <string> // std::stoul (baudrate parsing)
+#include <string_view> // profile names
+#include <utility> // std::pair in the profile table
 
 #include <Robotiq/gripper.hpp> // Gripper, GripperCommand/Status
-#include <Robotiq/gripper/device_profile.hpp> // DeviceProfile, profiles::k2F85
+#include <Robotiq/gripper/device_profile.hpp> // DeviceProfile and the shipped profiles
 #include <Robotiq/gripper/stderr_logger.hpp>
 #include <Robotiq/gripper/units.hpp>
 
 #include "gripper_events.hpp" // connectGripper(), activateOrRecover(), moveTo(): shared with the other examples
 
 // The handful of SDK types this example touches directly:
+using Robotiq::DeviceProfile;
 using Robotiq::Gripper;
 using Robotiq::GripperCommand;
-using Robotiq::profiles::k2F85;
 
 namespace {
 // Any rate a serial link plausibly runs at. Also what catches a negative:
@@ -33,21 +37,45 @@ constexpr unsigned long kMinBaudrate = 1;
 constexpr unsigned long kMaxBaudrate = 1000000;
 //! [baudrate-bounds]
 
-constexpr double kSpeed = 0.150; // m/s, the 2F-85's full scale
+// The third argument names one of the profiles the SDK ships; the first
+// entry is the default.
+//! [model-profiles]
+constexpr std::array<std::pair<std::string_view, DeviceProfile>, 5> kProfiles{{
+   {"2f85", Robotiq::profiles::k2F85},
+   {"2f140", Robotiq::profiles::k2F140},
+   {"hande", Robotiq::profiles::kHandE},
+   {"hande_100", Robotiq::profiles::kHandE100},
+   {"hande_c10", Robotiq::profiles::kHandEC10},
+}};
+//! [model-profiles]
+
 constexpr double kEffort = 1.0; // maximum grip effort
+
+// Shared by the argument checks below.
+void printUsage(const char* program)
+{
+   std::cerr << "Usage: " << program << " <port> [baudrate] [model]\n"
+             << "  model: " << kProfiles.front().first << " (default)";
+   for(auto entry = kProfiles.begin() + 1; entry != kProfiles.end(); ++entry)
+   {
+      std::cerr << ", " << entry->first;
+   }
+   std::cerr << '\n';
+}
 } // namespace
 
 //! \brief Connect, activate, open, then close — see the file header comment.
-//! \param argc Argument count; expects 2 or 3 (program name, port, [baudrate]).
-//! \param argv argv[1] is the serial port; argv[2], if given, is the baudrate.
+//! \param argc Argument count; expects 2 to 4 (program name, port, [baudrate], [model]).
+//! \param argv argv[1] is the serial port; argv[2], if given, is the baudrate;
+//!             argv[3], if given, names the gripper model's profile.
 //! \return EXIT_SUCCESS on a full connect/activate/open/close cycle;
 //!         EXIT_FAILURE on a bad argument, a connection error, or a timeout.
 int main(int argc, char* argv[])
 {
    //! [argument-handling]
-   if(argc < 2)
+   if(argc < 2 || argc > 4)
    {
-      std::cerr << "Usage: " << argv[0] << " <port> [baudrate]\n";
+      printUsage(argv[0]);
       return EXIT_FAILURE;
    }
    //! [argument-handling]
@@ -74,6 +102,22 @@ int main(int argc, char* argv[])
       }
    }
 
+   //! [model-selection]
+   DeviceProfile profile = kProfiles.front().second;
+   if(argc > 3)
+   {
+      const auto named =
+         std::find_if(kProfiles.begin(), kProfiles.end(), [&](const auto& entry) { return entry.first == argv[3]; });
+      if(named == kProfiles.end())
+      {
+         std::cerr << "Unknown model '" << argv[3] << "'\n";
+         printUsage(argv[0]);
+         return EXIT_FAILURE;
+      }
+      profile = named->second;
+   }
+   //! [model-selection]
+
    // The SDK logs through an injectable sink; naming the instances
    // tells library and application lines apart in the shared stream.
    // (A real integration gets the same separation from its injected
@@ -98,7 +142,7 @@ int main(int argc, char* argv[])
    // persistent state, not rebuilt per move.
    GripperCommand command = GripperCommand::defaults(); // GoTo added by moveTo
    //! [speed-optional-check]
-   const std::optional<uint8_t> speed = Robotiq::units::speedToRegister(kSpeed, k2F85);
+   const std::optional<uint8_t> speed = Robotiq::units::speedToRegister(profile.maxSpeed, profile);
    const std::optional<uint8_t> force = Robotiq::units::effortToRegister(kEffort);
    if(!speed || !force)
    {
@@ -110,13 +154,13 @@ int main(int argc, char* argv[])
    //! [speed-optional-check]
 
    logger->log(Robotiq::Logger::Level::Info, "Opening...");
-   if(!examples::moveTo(*gripper, command, k2F85.maxOpening, k2F85, *logger))
+   if(!examples::moveTo(*gripper, command, profile.maxOpening, profile, *logger))
    {
       return EXIT_FAILURE;
    }
 
    logger->log(Robotiq::Logger::Level::Info, "Closing...");
-   if(!examples::moveTo(*gripper, command, k2F85.minOpening, k2F85, *logger))
+   if(!examples::moveTo(*gripper, command, profile.minOpening, profile, *logger))
    {
       return EXIT_FAILURE;
    }

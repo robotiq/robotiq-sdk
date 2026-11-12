@@ -222,7 +222,10 @@ the way [Quick start](02-quick-start.md) describes.
 ```
 
 It activates the gripper and then opens and closes the fingers, so keep
-the jaws clear before starting it. The other examples are described in
+the jaws clear before starting it. It assumes a 2F-85; for another
+gripper add the baudrate and its model, e.g. `/dev/ttyUSB0 115200 2f140`
+(`2f85`, `2f140`, `hande`, `hande_100` or `hande_c10`). The other
+examples are described in
 [examples/README.md](../sdk_cpp/examples/README.md).
 
 ## Instructions to set up VS Code
