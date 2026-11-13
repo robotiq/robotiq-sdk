@@ -94,13 +94,25 @@ inline constexpr double kAmperesPerRegisterStep = 0.010;
 [[nodiscard]] std::optional<double> openingFromRegister(uint8_t value, const DeviceProfile& profile);
 
 //! \ingroup units
-//! Knuckle angle in rad, 0 at open -> rPR, clamped to the register band.
-//! \return std::nullopt for a non-finite angle or a profile with no knuckle.
+//! Knuckle angle in rad -> rPR. Unlike the opening, linear over the whole byte:
+//! angles past the register band extrapolate, saturating at 0 and 255.
+//! \param angle Knuckle rotation from openPosition, in radians.
+//! \param profile The device profile; only knuckleAnglePerCount and
+//!        openPosition are used.
+//! \return rPR, or std::nullopt for a non-finite \p angle or a profile
+//!         without DeviceProfile::hasKnuckle().
 [[nodiscard]] std::optional<uint8_t> knuckleAngleToRegister(double angle, const DeviceProfile& profile);
 
 //! \ingroup units
-//! gPO -> knuckle angle in rad, 0 at open.
-//! \return std::nullopt for a profile with no knuckle.
+//! gPO -> knuckle angle in rad from openPosition. Unlike the opening, linear
+//! over the whole byte: readings past the register band extrapolate.
+//! \warning Valid only in parallel-finger mode: an encompassing-mode reading
+//!          past closedPosition gives an angle with no physical meaning.
+//! \param value The raw register value (gPO).
+//! \param profile The device profile; only knuckleAnglePerCount and
+//!        openPosition are used.
+//! \return The angle in radians, or std::nullopt for a profile without
+//!         DeviceProfile::hasKnuckle().
 [[nodiscard]] std::optional<double> knuckleAngleFromRegister(uint8_t value, const DeviceProfile& profile);
 
 //! \ingroup units
