@@ -72,7 +72,7 @@ FIRMWARE_FAMILY = {
 }
 HW_REV_HINT = "Read it from the finger label: TSF140-21xxx is 2.1, TSF140-22xxx is 2.2."
 
-# The hub takes a while to reset after USB_COMMAND_ENTER_BOOTLOADER: about 22 s measured on a hub running 2.2.0
+# The hub takes a while to reset after USB_COMMAND_ENTER_BOOTLOADER: 2 s to 22 s measured on hubs running 2.2.0
 BOOTLOADER_WAIT_TIMEOUT = 30
 
 
@@ -96,6 +96,12 @@ def find_latest_firmware(family):
         if version and version[0] == family:
             files[version] = path
     return files[max(files)] if files else None
+
+
+def is_downgrade(running_version, firmware_version):
+    """Across families the versions don't compare: that is the hardware revision check's job."""
+    return bool(running_version and firmware_version and running_version[0] == firmware_version[0]
+                and running_version > firmware_version)
 
 
 def format_version(version):
@@ -503,7 +509,7 @@ def read_hub_device_info(serial_device):
 def detect_hardware_revision(serial_device, old_vid_pid):
     """Detects the hardware revision of a Master Hub running its application.
 
-    :returns: hardware revision, or None if it can't be told
+    :returns: (hardware revision or None if it can't be told, running firmware version or None)
     """
     # Stop any sensor stream left running so it doesn't hide the replies. The hub doesn't ack this command, so
     # wait for the packets already in flight to land, then the port to go quiet.
@@ -516,14 +522,14 @@ def detect_hardware_revision(serial_device, old_vid_pid):
 
     # The old VID/PID predates hardware revision 2.2
     if old_vid_pid:
-        return "2.1"
+        return "2.1", running_version
 
     if running_version is None:
         sys.stderr.write("Error: The device did not report its firmware version.\n")
-        return None
+        return None, None
 
     if running_version[0] == FIRMWARE_FAMILY["2.1"]:
-        return "2.1"
+        return "2.1", running_version
 
     if running_version[0] == FIRMWARE_FAMILY["2.2"]:
         status, info = read_hub_device_info(serial_device)
@@ -535,11 +541,11 @@ def detect_hardware_revision(serial_device, old_vid_pid):
         else:
             sys.stderr.write("Error: The hub EEPROM holds unexpected device info (hardware version {}, "
                              "serial number {}).\n".format(info[0].hex(), info[1].decode("ascii", "replace")))
-            return None
-        return "2.2"
+            return None, running_version
+        return "2.2", running_version
 
     sys.stderr.write("Error: Unknown firmware family {}.\n".format(format_version(running_version)))
-    return None
+    return None, running_version
 
 
 def confirm_force(reasons):
@@ -623,10 +629,11 @@ def main():
 
     # Detect the hardware revision while the application is still running
     hw_rev = None
+    running_version = None
     if app_running:
         sys.stderr.write("Device found on {}.\n".format(serial_device.port))
         serial_device.timeout = 0.1
-        hw_rev = detect_hardware_revision(serial_device, old_vid_pid)
+        hw_rev, running_version = detect_hardware_revision(serial_device, old_vid_pid)
     else:
         sys.stderr.write("No device in application mode found. The hardware revision can't be detected.\n")
 
@@ -662,8 +669,18 @@ def main():
             sys.stderr.write("Error: No {}.x firmware files found in {}\n".format(
                 FIRMWARE_FAMILY[hw_rev], os.path.abspath(BIN_DIR)))
             sys.exit(1)
+        firmware_version = firmware_version_from_path(firmware_file)
+        # Hubs can run builds newer than bin/: only downgrade one when the user names the file
+        if is_downgrade(running_version, firmware_version):
+            sys.stderr.write("Error: The hub runs firmware {}, newer than {}, the latest in bin/. Nothing was flashed.\n"
+                             "To downgrade it anyway, pass --firmware {}\n".format(
+                                 format_version(running_version), format_version(firmware_version), firmware_file))
+            sys.exit(1)
 
     sys.stderr.write("Firmware: {}\n".format(os.path.basename(firmware_file)))
+    if is_downgrade(running_version, firmware_version):
+        sys.stderr.write("Downgrading from {} to {}.\n".format(format_version(running_version),
+                                                                format_version(firmware_version)))
 
     # Read the firmware and check it is for this chip before rebooting, so a bad file can't strand the hub
     firmware = load_firmware(firmware_file)
@@ -689,7 +706,7 @@ def main():
             sys.stderr.write("Warning: Not running as root. On Linux the bootloader USB device is usually root-only: "
                              "if it can't be opened, the hub stays in its bootloader. Run with sudo or add a udev "
                              "rule (see README.md).\n")
-        sys.stderr.write("Rebooting into bootloader, this takes about 20 seconds...\n")
+        sys.stderr.write("Rebooting into bootloader, this can take up to 20 seconds...\n")
         serial_device.write(make_usb_packet(USB_COMMAND_ENTER_BOOTLOADER))
         serial_device.close()
     else:

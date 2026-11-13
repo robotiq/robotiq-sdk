@@ -92,6 +92,33 @@ def test_refuses_before_rebooting(hub, run, setup, argv, typed, message):
     assert_nothing_flashed(hub)
 
 
+def on_newer_2_x_firmware(hub):
+    hub.version = b"2.3.1\x00"
+
+
+@pytest.mark.parametrize("argv", [[], ["--latest"], ["--hw-rev", "2.2"], ["--force"]],
+                         ids=["default", "--latest", "--hw-rev", "--force"])
+def test_refuses_to_downgrade_on_its_own(hub, run, argv):
+    on_newer_2_x_firmware(hub)
+
+    code, err = run(*argv)
+
+    assert code == 1
+    assert "The hub runs firmware 2.3.1, newer than 2.2.0, the latest in bin/" in err
+    assert "--firmware " + FW_2 in err
+    assert_nothing_flashed(hub)
+
+
+def test_downgrades_when_the_firmware_is_named(hub, run):
+    on_newer_2_x_firmware(hub)
+
+    code, err = run("--firmware", FW_2)
+
+    assert code == 0, err
+    assert "Downgrading from 2.3.1 to 2.2.0" in err
+    assert_flashed(hub, FW_2)
+
+
 def test_refuses_a_firmware_file_name_without_version(hub, run, tmp_path):
     firmware = tmp_path / "hub_firmware.cyacd"
     shutil.copy(FW_2, firmware)

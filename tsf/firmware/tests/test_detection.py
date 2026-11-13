@@ -72,10 +72,16 @@ def test_read_hub_device_info(hub, serial_device, info, status):
 def test_detect_hardware_revision(hub, serial_device, old_vid_pid, version, info, hw_rev):
     hub.version, hub.device_info = version, info
 
-    assert bh.detect_hardware_revision(serial_device, old_vid_pid) == hw_rev
+    assert bh.detect_hardware_revision(serial_device, old_vid_pid)[0] == hw_rev
 
 
 def test_detection_stops_the_sensor_stream_first(hub, serial_device):
     bh.detect_hardware_revision(serial_device, False)
 
     assert hub.serial_commands[0] == bh.USB_COMMAND_AUTOSEND_ASYNC_SENSORS
+
+
+def test_detect_hardware_revision_returns_the_running_version(hub, serial_device):
+    hub.version = b"2.3.1\x00"
+
+    assert bh.detect_hardware_revision(serial_device, False) == ("2.2", (2, 3, 1))

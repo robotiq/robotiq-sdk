@@ -36,8 +36,11 @@ detected automatically and the firmware is taken from `bin/`:
 python bootloader_host.py
 ```
 
-Flash a specific firmware file. It is refused if it doesn't match the
-hardware revision:
+If the hub runs firmware newer than the latest in `bin/` (a development
+build, for example), this is refused rather than downgrading it.
+
+Flash a specific firmware file, older than the running one if needed. It is
+refused if it doesn't match the hardware revision:
 
 ```
 python bootloader_host.py --firmware path/to/Master_hub_X.Y.Z.cyacd
@@ -73,12 +76,13 @@ was detected as another one, or couldn't be detected at all.
    - on `2.x`, cross-checks the hub device info stored in EEPROM at
      production. Missing device info only gives a warning; unexpected device
      info stops the script.
-3. Picks the firmware and checks that it matches the hardware revision
+3. Picks the firmware and checks that it matches the hardware revision. By
+   default it doesn't downgrade a hub that runs firmware newer than `bin/`
 4. Reads the `.cyacd` file and checks that it is for this chip, so a missing
    or corrupt file is caught before the hub reboots
 5. Sends a reboot-to-bootloader command over serial
-6. Waits up to 30 seconds for the HID bootloader to appear (a hub on 2.2.0
-   takes about 20 seconds to reset)
+6. Waits up to 30 seconds for the HID bootloader to appear (resets of 2 s
+   to 22 s were measured on hubs running 2.2.0)
 7. Checks the chip again against the bootloader, flashes the firmware,
    verifies the application checksum and exits the bootloader
 
