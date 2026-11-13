@@ -35,14 +35,22 @@
 #define ROBOTIQ_TACTILE_SENSOR_H
 
 #include "finger_data.h"
-#include <libserialport.h>
 #include <thread>
+#include <memory>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
 #include <string>
 #include <vector>
 #include <stdint.h>
+
+// The serial transport the Robotiq SDKs share. Internal: it is compiled into
+// this library and never included from its public headers.
+namespace Robotiq {
+namespace common {
+class SerialPort;
+}
+}
 
 /**
  * @class RobotiqTactileSensor
@@ -126,8 +134,19 @@ private:
     // Internal thread function
     void threadLoop();
 
-    // Serial port handle (libserialport)
-    struct sp_port* m_port;
+    // The read thread's work; throws Robotiq::common::SerialError when the
+    // port fails.
+    void collectData();
+
+    // Sends the frames queued by other threads; called from the read thread.
+    void sendPendingFrames();
+
+    // Queues \p frame for the read thread to send.
+    void queueFrame(const std::vector<uint8_t>& frame);
+
+    // Serial port; null when the constructor could not open it. Once the
+    // read thread runs, only that thread touches it.
+    std::unique_ptr<Robotiq::common::SerialPort> m_port;
 
     // Threading
     std::thread m_thread;
@@ -161,8 +180,10 @@ private:
     std::string m_firmwareVersion;
     bool m_versionReady;
 
-    // Serializes writes to the serial port between user thread and read thread
-    std::mutex m_portWriteMutex;
+    // Frames other threads hand to the read thread, which alone touches the
+    // port: the serial transport is not thread-safe.
+    std::mutex m_pendingFramesMutex;
+    std::vector<std::vector<uint8_t> > m_pendingFrames;
 
     // Prevent copying
     RobotiqTactileSensor(const RobotiqTactileSensor&) = delete;

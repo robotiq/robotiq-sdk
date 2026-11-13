@@ -18,14 +18,17 @@ defaults:
     working-directory: tsf
 
 jobs:
-  # The C++ SDK in Release. Quick_start and the two test programs need a
-  # sensor to run, so this job builds them and stops there.
+  # The C++ SDK in Release, on the three systems it targets (MSVC on
+  # Windows). Quick_start and the two test programs need a sensor to run, so
+  # this job builds them and stops there.
   sdk-cpp:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Install libserialport
-        run: sudo apt-get update && sudo apt-get install -y libserialport-dev
       - name: Configure and build
         run: |
           cmake -S sdk_cpp -B build -DCMAKE_BUILD_TYPE=Release

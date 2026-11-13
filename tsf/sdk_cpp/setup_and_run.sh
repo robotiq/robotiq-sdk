@@ -81,14 +81,6 @@ else
     print_success "cmake is installed (version $CMAKE_VERSION)"
 fi
 
-# Check libserialport-dev
-if ! is_package_installed "libserialport-dev"; then
-    print_warning "libserialport-dev not found"
-    PACKAGES_TO_INSTALL+=("libserialport-dev")
-else
-    print_success "libserialport-dev is installed"
-fi
-
 # Check pkg-config (useful but not strictly required)
 if ! command_exists pkg-config; then
     print_warning "pkg-config not found (recommended)"

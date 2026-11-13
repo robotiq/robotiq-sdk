@@ -47,6 +47,9 @@ if(GRIPPERS_BUILD_FAKE)
 endif()
 target_link_libraries(grippers_tests PRIVATE
   grippers_sdk
+  # The shared serial code is compiled into grippers_sdk; the tests only
+  # need its headers to reach it.
+  Robotiq::common::serial_headers
   grippers_warnings
   GTest::gmock
   GTest::gtest_main
