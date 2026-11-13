@@ -328,11 +328,14 @@ TEST(TestKnuckleAngleToRegister, rounds_to_the_nearest_value)
    EXPECT_EQ(knuckleAngleToRegister(k2F85.knuckleAngleRange() / 2.0, k2F85), 117); // 116.5 steps
 }
 
-TEST(TestKnuckleAngleToRegister, clamps_controller_overshoot_to_the_sweep_ends)
+TEST(TestKnuckleAngleToRegister, extrapolates_past_the_band_and_clamps_to_the_byte)
 {
-   EXPECT_EQ(knuckleAngleToRegister(-1e-4, k2F85), k2F85.openPosition);
-   EXPECT_EQ(knuckleAngleToRegister(k2F85.knuckleAngleRange() + 1e-4, k2F85), k2F85.closedPosition);
-   EXPECT_EQ(knuckleAngleToRegister(2.0, k2F85), k2F85.closedPosition);
+   EXPECT_EQ(knuckleAngleToRegister(-k2F85.knuckleAnglePerCount, k2F85), k2F85.openPosition - 1);
+   EXPECT_EQ(knuckleAngleToRegister(k2F85.knuckleAngleRange() + k2F85.knuckleAnglePerCount, k2F85),
+             k2F85.closedPosition + 1);
+   EXPECT_EQ(knuckleAngleToRegister(-1.0, k2F85), 0);
+   EXPECT_EQ(knuckleAngleToRegister(2.0, k2F85), 255);
+   EXPECT_EQ(knuckleAngleToRegister(1e306, k2F85), 255);
 }
 
 TEST(TestKnuckleAngleToRegister, rejects_what_has_no_register_value)
@@ -340,10 +343,19 @@ TEST(TestKnuckleAngleToRegister, rejects_what_has_no_register_value)
    EXPECT_FALSE(knuckleAngleToRegister(kNaN, k2F85).has_value());
    EXPECT_FALSE(knuckleAngleToRegister(kInf, k2F85).has_value());
 
-   DeviceProfile noBand = k2F85;
-   noBand.openPosition = 3;
-   noBand.closedPosition = 3;
-   EXPECT_FALSE(knuckleAngleToRegister(0.4, noBand).has_value());
+   DeviceProfile negativeSlope = k2F85;
+   negativeSlope.knuckleAnglePerCount = -k2F85.knuckleAnglePerCount;
+   EXPECT_FALSE(knuckleAngleToRegister(-0.4, negativeSlope).has_value());
+   EXPECT_FALSE(knuckleAngleFromRegister(100, negativeSlope).has_value());
+
+   for(const double slope : {kNaN, kInf})
+   {
+      DeviceProfile broken = k2F85;
+      broken.knuckleAnglePerCount = slope;
+      EXPECT_FALSE(broken.hasKnuckle()) << slope;
+      EXPECT_FALSE(knuckleAngleToRegister(0.4, broken).has_value()) << slope;
+      EXPECT_FALSE(knuckleAngleFromRegister(100, broken).has_value()) << slope;
+   }
 }
 
 TEST(TestKnuckleAngleFromRegister, the_register_band_ends_land_on_the_sweep)
@@ -352,10 +364,10 @@ TEST(TestKnuckleAngleFromRegister, the_register_band_ends_land_on_the_sweep)
    EXPECT_DOUBLE_EQ(knuckleAngleFromRegister(k2F85.closedPosition, k2F85).value(), k2F85.knuckleAngleRange());
 }
 
-TEST(TestKnuckleAngleFromRegister, values_outside_the_band_read_as_the_sweep_ends)
+TEST(TestKnuckleAngleFromRegister, values_outside_the_band_extrapolate)
 {
-   EXPECT_DOUBLE_EQ(knuckleAngleFromRegister(0, k2F85).value(), 0.0);
-   EXPECT_DOUBLE_EQ(knuckleAngleFromRegister(255, k2F85).value(), k2F85.knuckleAngleRange());
+   EXPECT_LT(knuckleAngleFromRegister(0, k2F85).value(), 0.0);
+   EXPECT_GT(knuckleAngleFromRegister(255, k2F85).value(), k2F85.knuckleAngleRange());
 }
 
 TEST(TestKnuckleAngleFromRegister, closes_the_opposite_way_round_to_the_opening)
@@ -364,12 +376,16 @@ TEST(TestKnuckleAngleFromRegister, closes_the_opposite_way_round_to_the_opening)
    EXPECT_LT(openingFromRegister(200, k2F85).value(), openingFromRegister(100, k2F85).value());
 }
 
-TEST(TestKnuckleAngleFromRegister, inside_the_band_an_angle_read_back_commands_the_same_value)
+TEST(TestKnuckleAngleFromRegister, every_count_round_trips_through_the_angle)
 {
-   for(int count = k2F85.openPosition; count <= k2F85.closedPosition; ++count)
+   for(const DeviceProfile& profile : {k2F85, profiles::k2F140})
    {
-      const auto raw = static_cast<uint8_t>(count);
-      EXPECT_EQ(knuckleAngleToRegister(knuckleAngleFromRegister(raw, k2F85).value(), k2F85), raw) << "count " << count;
+      for(int count = 0; count <= 0xFF; ++count)
+      {
+         const auto raw = static_cast<uint8_t>(count);
+         EXPECT_EQ(knuckleAngleToRegister(knuckleAngleFromRegister(raw, profile).value(), profile), raw)
+            << "count " << count;
+      }
    }
 }
 

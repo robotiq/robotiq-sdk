@@ -5,6 +5,7 @@
 #pragma once
 
 #include <cstdint>
+#include <limits>
 
 namespace Robotiq {
 
@@ -48,6 +49,12 @@ struct DeviceProfile
 
    //! Metres from full closure to full opening.
    [[nodiscard]] constexpr double openingRange() const { return maxOpening - minOpening; }
+
+   //! Whether the knuckle conversions apply: a finite, positive slope.
+   [[nodiscard]] constexpr bool hasKnuckle() const
+   {
+      return knuckleAnglePerCount > 0.0 && knuckleAnglePerCount <= std::numeric_limits<double>::max();
+   }
 
    //! Radians the knuckle sweeps over the whole register band.
    [[nodiscard]] constexpr double knuckleAngleRange() const { return knuckleAnglePerCount * registerPositionRange(); }

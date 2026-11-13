@@ -33,6 +33,8 @@ public:
 
    [[nodiscard]] constexpr double valueAt(double ratio) const { return static_cast<double>(_lower) + ratio * span(); }
 
+   [[nodiscard]] constexpr double clampedValueAt(double ratio) const { return valueAt(std::clamp(ratio, 0.0, 1.0)); }
+
    [[nodiscard]] constexpr bool isValid() const { return span() > 0.0 && span() <= std::numeric_limits<double>::max(); }
 
 private:
