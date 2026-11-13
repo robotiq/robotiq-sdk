@@ -10,6 +10,10 @@ endif()
 
 project(grippers VERSION ${ROBOTIQ_SDK_VERSION} LANGUAGES C CXX)
 
+# Code shared with the other SDKs of robotiq-sdk (common/), compiled into this
+# library rather than linked as one of its own.
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/RobotiqCommon.cmake")
+
 if(NOT DEFINED CMAKE_CXX_STANDARD)
    set(CMAKE_CXX_STANDARD 17)
 endif()

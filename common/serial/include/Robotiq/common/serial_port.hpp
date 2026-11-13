@@ -2,15 +2,18 @@
 //
 // Licensed under the BSD-3-Clause license; see LICENSE for details.
 
-//! \brief The OS serial handle behind DefaultSerial — termios on
+//! \brief The OS serial handle every Robotiq SDK shares — termios on
 //!        Linux/macOS, the Win32 comm API on Windows.
 //! One translation unit per platform family implements it (posix/,
-//! win32/); the header is internal to the SDK, since the transport seam
-//! consumers extend is Robotiq::Serial.
-//! Every operation reports failure as SerialIOException. The read
-//! contract is the one Robotiq::Serial documents: a zero timeout takes
-//! only what is already buffered, a positive one waits for \p size bytes
-//! or the deadline, whichever comes first.
+//! win32/). It is internal to the SDKs: each compiles it into its own
+//! library and never exposes it in a public header, so the grippers SDK
+//! wraps it in DefaultSerial and the TSF SDK in RobotiqTactileSensor.
+//! Every operation reports failure as SerialError, which each SDK turns
+//! into its own error reporting. A zero read timeout takes only what is
+//! already buffered, a positive one waits for \p size bytes or the
+//! deadline, whichever comes first.
+//! Not thread-safe: a caller that reads and writes from two threads
+//! serializes the calls itself.
 
 #pragma once
 
@@ -19,7 +22,7 @@
 #include <cstdint>
 #include <string>
 
-namespace Robotiq::detail {
+namespace Robotiq::common {
 class SerialPort
 {
 public:
@@ -62,4 +65,4 @@ private:
    uint32_t _baudrate = 0;
 #endif
 };
-} // namespace Robotiq::detail
+} // namespace Robotiq::common

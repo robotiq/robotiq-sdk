@@ -13,13 +13,12 @@ Contains
 
 ### Build Dependencies
 
-- **C++11 Compiler**: GCC 4.8+, Clang 3.4+, or MSVC 2015+
-- **CMake**: 3.10 or higher
-- **libserialport**: Cross-platform serial port library
+- **C++17 Compiler**: GCC 7+, Clang 5+, or MSVC 2017+ (Visual Studio 2017 or later). Only the SDK's own sources need C++17: its public headers stay C++11-clean, so code that uses the SDK can still build as C++11.
+- **CMake**: 3.16 or higher
+- **A full robotiq-sdk checkout**: the SDK compiles in the serial transport it shares with the grippers SDK (`common/serial` at the repository root). No serial library to install.
 
 ### Runtime Dependencies
 
-- **libserialport**: Must be installed on the system
 - **USB Permissions** (Linux only): User must have access to serial ports
 
 ## Installation
@@ -227,19 +226,12 @@ Aplly `udev` rules in the utils folder:
 
 ### No Data Received
 
-1. **Increase timeout**: Modify `sp_wait()` timeout in `threadLoop()`
+1. **Increase timeout**: Modify `USB_READ_TIMEOUT` in `RobotiqTactileSensor.cpp`
 2. **Check CRC errors**: CRC mismatches indicate communication issues
 3. **Verify power**: Ensure sensor has adequate USB power
 4. **Test with lower rate**: Try `period_ms = 10` instead of `1`
 
 ### Build Errors
-
-**"libserialport not found"**:
-```bash
-# Ubuntu/Debian
-sudo apt-get install libserialport-dev
-
-```
 
 **"undefined reference to pthread"**:
 ```bash
@@ -301,6 +293,5 @@ For issues, questions, or contributions:
 
 ## References
 
-- [libserialport Documentation](https://sigrok.org/wiki/Libserialport)
 - [Robotiq Sensor Documentation](https://robotiq.com/)
 - Original tactile_sensor_ui: `../tactile_sensor_ui/`

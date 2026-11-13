@@ -8,6 +8,7 @@
 #include <chrono>
 #include <memory>
 
+#include <Robotiq/common/latency_timer.hpp>
 #include <Robotiq/detail/default_serial.hpp>
 #include <Robotiq/gripper/logger.hpp>
 #include <Robotiq/gripper/serial_io_exception.hpp>
@@ -109,7 +110,7 @@ protected:
 
    [[nodiscard]] std::string lookup(const std::filesystem::path& port) const
    {
-      return detail::latencyTimerPath(port.string(), (_root / "sysfs").string());
+      return common::latencyTimerPath(port.string(), (_root / "sysfs").string());
    }
 
    std::filesystem::path _root;

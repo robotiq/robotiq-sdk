@@ -5,37 +5,34 @@
 
 #include <Robotiq/detail/default_serial.hpp>
 
-#include <fstream>
 #include <memory>
 #include <string>
 #include <utility>
 
-#ifdef __linux__
-#include <filesystem>
-#include <system_error>
-#endif
-
+#include <Robotiq/common/latency_timer.hpp>
+#include <Robotiq/common/serial_error.hpp>
+#include <Robotiq/common/serial_port.hpp>
 #include <Robotiq/detail/default_logger.hpp>
 #include <Robotiq/gripper/logger.hpp>
 #include <Robotiq/gripper/serial_io_exception.hpp>
 
-#include "detail/serial_port.hpp"
-
 namespace Robotiq::detail {
-
-#ifdef __linux__
-std::string latencyTimerPath(const std::string& port, const std::string& sysfsDevices)
+namespace {
+// The shared SerialPort reports failure as common::SerialError, which is
+// internal; the Serial contract promises SerialIOException.
+template <typename Operation>
+decltype(auto) translateErrors(Operation&& operation)
 {
-   std::error_code error;
-   const std::filesystem::path device = std::filesystem::canonical(port, error);
-   if(error)
+   try
    {
-      return {};
+      return operation();
    }
-   const std::filesystem::path attribute = std::filesystem::path(sysfsDevices) / device.filename() / "latency_timer";
-   return std::filesystem::exists(attribute, error) ? attribute.string() : std::string();
+   catch(const common::SerialError& error)
+   {
+      throw SerialIOException(error.what());
+   }
 }
-#endif
+} // namespace
 
 DefaultSerial::DefaultSerial(SerialConfig config, std::shared_ptr<Logger> logger)
    : _config(std::move(config))
@@ -65,19 +62,19 @@ void DefaultSerial::open()
 
    // Published only once configured: a throw here leaves the connection
    // closed rather than half-open.
-   auto port = std::make_unique<SerialPort>();
-   port->open(_config.port, _config.baudrate);
+   auto port = std::make_unique<common::SerialPort>();
+   translateErrors([&] { port->open(_config.port, _config.baudrate); });
    _port = std::move(port);
 
 #ifdef __linux__
    if(_config.latencyTimerMs > 0)
    {
-      const std::string timerPath = latencyTimerPath(_config.port);
+      const std::string timerPath = common::latencyTimerPath(_config.port);
       if(timerPath.empty())
       {
          _logger->log(Logger::Level::Debug, _config.port + " is not an FTDI adapter; no latency_timer to set.");
       }
-      else if(applyLatencyTimer(timerPath))
+      else if(common::applyLatencyTimer(timerPath, _config.latencyTimerMs))
       {
          _logger->log(Logger::Level::Info,
                       "FTDI latency_timer set to " + std::to_string(_config.latencyTimerMs) + " ms on " + _config.port
@@ -123,7 +120,7 @@ std::vector<uint8_t> DefaultSerial::read(size_t size, std::chrono::milliseconds 
    }
 
    std::vector<uint8_t> data(size);
-   data.resize(_port->read(data.data(), size, timeout));
+   data.resize(translateErrors([&] { return _port->read(data.data(), size, timeout); }));
    return data;
 }
 
@@ -134,13 +131,13 @@ void DefaultSerial::write(const std::vector<uint8_t>& data)
       throw SerialIOException("write called on closed port");
    }
 
-   const size_t written = _port->write(data.data(), data.size(), _config.timeout);
+   const size_t written = translateErrors([&] { return _port->write(data.data(), data.size(), _config.timeout); });
    if(written < data.size())
    {
       throw SerialIOException("write timeout: wrote " + std::to_string(written) + " of " + std::to_string(data.size())
                               + " bytes");
    }
-   if(!_port->drain(_config.timeout))
+   if(!translateErrors([&] { return _port->drain(_config.timeout); }))
    {
       throw SerialIOException("write timeout: the bytes written did not drain");
    }
@@ -154,37 +151,5 @@ std::chrono::milliseconds DefaultSerial::getTimeout() const
 const SerialConfig& DefaultSerial::getConfig() const
 {
    return _config;
-}
-
-bool DefaultSerial::applyLatencyTimer(const std::string& path) const
-{
-#ifdef __linux__
-   // Read-before-write: sysfs is root-owned, so an unprivileged caller can't
-   // write to it. If a privileged init (udev rule, container entrypoint) has
-   // already pinned the value, skip the write — otherwise we'd emit a
-   // spurious WARN about a device that's already configured.
-   {
-      std::ifstream in(path);
-      int current = -1;
-      if(in >> current && current == _config.latencyTimerMs)
-      {
-         return true;
-      }
-   }
-
-   std::ofstream out(path);
-   if(!out.is_open())
-   {
-      return false;
-   }
-   // sysfs rejects an out-of-range value only when the buffer reaches it.
-   out << _config.latencyTimerMs << std::flush;
-   return out.good();
-#else
-   // No sysfs on this platform; the FTDI latency timer is a driver setting
-   // (e.g. Windows device manager). Nothing to enforce programmatically.
-   (void)path;
-   return false;
-#endif
 }
 } // namespace Robotiq::detail

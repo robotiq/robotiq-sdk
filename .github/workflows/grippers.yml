@@ -185,6 +185,7 @@ jobs:
       - name: clang-format check
         run: |
           git ls-files ':(glob)sdk_cpp/include/**/*.hpp' ':(glob)sdk_cpp/src/**/*.[ch]pp' ':(glob)sdk_cpp/tests/**/*.[ch]pp' ':(glob)sdk_cpp/examples/**/*.cpp' \
+            ':(top,glob)common/**/*.[ch]pp' \
             | xargs clang-format --dry-run --Werror
 
   # Doxyfile sets WARN_AS_ERROR = FAIL_ON_WARNINGS, so a plain `doxygen

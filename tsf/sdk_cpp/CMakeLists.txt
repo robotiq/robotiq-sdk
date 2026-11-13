@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 # One version for the whole robotiq-sdk repository, kept in its root VERSION
 # file (see the root README, "Versioning").
@@ -10,22 +10,20 @@ endif()
 
 project(RobotiqTactileSensorSDK VERSION ${ROBOTIQ_SDK_VERSION} LANGUAGES CXX)
 
-# Set C++ standard
-set(CMAKE_CXX_STANDARD 11)
+# The SDK's own sources build as C++17, the standard of the code it shares with
+# the other Robotiq SDKs. Set through CMAKE_CXX_STANDARD, so it does not
+# propagate: the public headers stay C++11-clean and consumers keep their own.
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Find libserialport (required dependency)
-find_library(SERIALPORT_LIBRARY NAMES serialport libserialport REQUIRED)
-find_path(SERIALPORT_INCLUDE_DIR libserialport.h REQUIRED)
+# Code shared with the other SDKs of robotiq-sdk (common/), compiled into this
+# library rather than linked as one of its own.
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/RobotiqCommon.cmake")
 
 # Find pthread (required for std::thread)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
-# Display found libraries
-message(STATUS "Found libserialport: ${SERIALPORT_LIBRARY}")
-message(STATUS "libserialport include dir: ${SERIALPORT_INCLUDE_DIR}")
 
 # SDK Library
 add_library(RobotiqTactileSensor STATIC
@@ -38,14 +36,15 @@ add_library(RobotiqTactileSensor STATIC
 target_include_directories(RobotiqTactileSensor
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${SERIALPORT_INCLUDE_DIR}
 )
 
 target_link_libraries(RobotiqTactileSensor
     PUBLIC
-        ${SERIALPORT_LIBRARY}
         Threads::Threads
 )
+
+# The OS serial transport (termios / Win32), shared with the grippers SDK.
+robotiq_link_common(RobotiqTactileSensor serial)
 
 # Quick Start Example Executable
 add_executable(Quick_start
