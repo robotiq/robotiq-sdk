@@ -94,6 +94,16 @@ inline constexpr double kAmperesPerRegisterStep = 0.010;
 [[nodiscard]] std::optional<double> openingFromRegister(uint8_t value, const DeviceProfile& profile);
 
 //! \ingroup units
+//! Knuckle angle in rad, 0 at open -> rPR, clamped to the register band.
+//! \return std::nullopt for a non-finite angle or a profile with no knuckle.
+[[nodiscard]] std::optional<uint8_t> knuckleAngleToRegister(double angle, const DeviceProfile& profile);
+
+//! \ingroup units
+//! gPO -> knuckle angle in rad, 0 at open.
+//! \return std::nullopt for a profile with no knuckle.
+[[nodiscard]] std::optional<double> knuckleAngleFromRegister(uint8_t value, const DeviceProfile& profile);
+
+//! \ingroup units
 //! Effort in [0, 1] -> rFR. 0 is the gripper's minimum force, 1 its
 //! maximum; a value above 1 saturates at register 255.
 //! \param effort Requested gripping effort, as a fraction of the

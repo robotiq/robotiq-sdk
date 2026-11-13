@@ -185,7 +185,12 @@ command.force = units::effortToRegister(kEffort).value();
 command.positionRequest = units::openingToRegister(kOpening, k2F85).value();
 
 double openingMetres = units::openingFromRegister(gripper.getStatus().position, k2F85).value();
+double knuckleRadians = units::knuckleAngleFromRegister(gripper.getStatus().position, k2F85).value();
 ```
+
+`knuckleAngleFromRegister` and `knuckleAngleToRegister` convert to the 2F
+knuckle angle instead, in radians from 0 at open; they yield nothing on the
+Hand-E family, which has no knuckle.
 
 These conversions return `std::optional` and yield nothing for a quantity with
 no defensible register value, so `.value()` above is safe only because `k2F85`

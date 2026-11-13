@@ -37,6 +37,9 @@ struct DeviceProfile
    uint8_t openPosition; //!< gPO after commanding rPR 0, measured
    uint8_t closedPosition; //!< gPO after commanding rPR 255, measured
 
+   //! rad/count of the 2F knuckle; must be positive, 0 when there is no knuckle.
+   double knuckleAnglePerCount = 0.0;
+
    //! Register steps from full opening to full closure, in parallel mode.
    [[nodiscard]] constexpr double registerPositionRange() const
    {
@@ -45,6 +48,9 @@ struct DeviceProfile
 
    //! Metres from full closure to full opening.
    [[nodiscard]] constexpr double openingRange() const { return maxOpening - minOpening; }
+
+   //! Radians the knuckle sweeps over the whole register band.
+   [[nodiscard]] constexpr double knuckleAngleRange() const { return knuckleAnglePerCount * registerPositionRange(); }
 };
 
 namespace profiles {
@@ -52,17 +58,17 @@ namespace profiles {
 //! \brief The measured profile for the 2F-85
 //!
 //! \warning Assumes that the gripper is in parallel-finger mode.
-inline constexpr DeviceProfile k2F85{0.020, 0.150, 0.0, 0.085, 3, 230};
+inline constexpr DeviceProfile k2F85{0.020, 0.150, 0.0, 0.085, 3, 230, 0.7929 / 227.0};
 
 //! \ingroup units
 //! \brief The measured profile for the 2F-140
 //!
 //! \warning Assumes that the gripper is in parallel-finger mode.
-inline constexpr DeviceProfile k2F140{0.030, 0.250, 0.0, 0.140, 3, 230};
+inline constexpr DeviceProfile k2F140{0.030, 0.250, 0.0, 0.140, 3, 230, 0.77 / 227.0};
 
 //! \ingroup units
 //! \brief The measured profile for the Hand-E
-inline constexpr DeviceProfile kHandE{0.020, 0.150, 0.0, 0.050, 3, 250};
+inline constexpr DeviceProfile kHandE{0.020, 0.150, 0.0, 0.050, 3, 250, 0.0};
 
 //! \ingroup units
 //! \brief The measured profile for the Hand-E 100 (100 mm stroke)
@@ -70,13 +76,13 @@ inline constexpr DeviceProfile kHandE{0.020, 0.150, 0.0, 0.050, 3, 250};
 //! Same speed range as the Hand-E (product sheet: 20 to 150 mm/s) over twice
 //! the stroke. Register endpoints measured on a Hand-E 100: 3 and 250, the
 //! Hand-E's band, so one count is about 0.4 mm of opening.
-inline constexpr DeviceProfile kHandE100{0.020, 0.150, 0.0, 0.100, 3, 250};
+inline constexpr DeviceProfile kHandE100{0.020, 0.150, 0.0, 0.100, 3, 250, 0.0};
 
 //! \ingroup units
 //! \brief The measured profile for the Hand-E C10
 //!
 //! Opening is the diameter between the three fingertips.
-inline constexpr DeviceProfile kHandEC10{0.014, 0.107, 0.0, 0.040, 3, 250};
+inline constexpr DeviceProfile kHandEC10{0.014, 0.107, 0.0, 0.040, 3, 250, 0.0};
 
 } // namespace profiles
 
