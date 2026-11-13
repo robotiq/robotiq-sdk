@@ -145,13 +145,28 @@ def test_bootloader_that_never_appears_points_to_hw_rev(hub, run):
     assert not hub.rows
 
 
-def test_bootloader_that_cannot_be_opened_fails(hub, run):
+def test_bootloader_that_never_appears_after_a_failed_detection_names_both_revisions(hub, run):
+    no_version_reply(hub)
+    hub.reset_delay = None
+
+    code, err = run("--firmware", FW_2, "--force", typed="FORCE\n")
+
+    assert code == 1
+    assert "run again with --hw-rev 2.1 or 2.2. " + bh.HW_REV_HINT in err
+    assert "None" not in err
+
+
+@pytest.mark.parametrize("euid, command", [(1000, "sudo and --hw-rev 2.2"), (0, "--hw-rev 2.2")])
+def test_bootloader_that_cannot_be_opened_points_to_hw_rev(hub, run, monkeypatch, euid, command):
+    monkeypatch.setattr(bh.sys, "platform", "linux")
+    monkeypatch.setattr(bh.os, "geteuid", lambda: euid, raising=False)
     hub.hid_open_error = True
 
     code, err = run()
 
     assert code == 1
     assert "open failed" in err
+    assert "The hub stays in its bootloader: run again with {}.".format(command) in err
     assert not hub.rows
 
 

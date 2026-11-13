@@ -573,6 +573,17 @@ def load_firmware(path):
     return firmware
 
 
+def needs_sudo():
+    return sys.platform.startswith("linux") and os.geteuid() != 0
+
+
+def rerun_hint(hw_rev, sudo=False):
+    option = "sudo and --hw-rev" if sudo else "--hw-rev"
+    if hw_rev:
+        return "run again with {} {}.".format(option, hw_rev)
+    return "run again with {} 2.1 or 2.2. {}".format(option, HW_REV_HINT)
+
+
 def wait_for_bootloader(vid, pid, timeout=BOOTLOADER_WAIT_TIMEOUT, interval=0.5):
     """Polls for the bootloader HID device, returns True once it is enumerated, False after timeout seconds."""
     deadline = time.time() + timeout
@@ -674,7 +685,7 @@ def main():
 
     # Reboot the device into bootloader
     if app_running:
-        if sys.platform.startswith("linux") and os.geteuid() != 0:
+        if needs_sudo():
             sys.stderr.write("Warning: Not running as root. On Linux the bootloader USB device is usually root-only: "
                              "if it can't be opened, the hub stays in its bootloader. Run with sudo or add a udev "
                              "rule (see README.md).\n")
@@ -687,13 +698,14 @@ def main():
     if not wait_for_bootloader(vid, pid):
         sys.stderr.write("Bootloader not found after {} seconds!\n".format(BOOTLOADER_WAIT_TIMEOUT))
         if app_running:
-            sys.stderr.write("If the hub has reached its bootloader since, run again with --hw-rev {}.\n".format(hw_rev))
+            sys.stderr.write("If the hub has reached its bootloader since, {}\n".format(rerun_hint(hw_rev)))
         sys.exit(1)
 
     # Connect to the device's bootloader
     try:
         bootloader = Bootloader(vid, pid)
     except OSError:
+        sys.stderr.write("The hub stays in its bootloader: {}\n".format(rerun_hint(hw_rev, needs_sudo())))
         sys.exit(1)
     if not bootloader.enter_bootloader():
         sys.stderr.write("Unable to communicate with bootloader!\n")
@@ -708,11 +720,12 @@ def main():
 
     sys.stderr.write("Programming firmware application...\n")
     if not bootloader.flash(firmware):
-        sys.stderr.write("Error while programming! The device stays in bootloader: run again with --hw-rev.\n")
+        sys.stderr.write("Error while programming! The device stays in bootloader: {}\n".format(rerun_hint(hw_rev)))
         sys.exit(1)
 
     if not bootloader.verify_checksum():
-        sys.stderr.write("Error: Application checksum is invalid! The device stays in bootloader: run again with --hw-rev.\n")
+        sys.stderr.write("Error: Application checksum is invalid! The device stays in bootloader: {}\n".format(
+            rerun_hint(hw_rev)))
         sys.exit(1)
 
     bootloader.exit_bootloader()
