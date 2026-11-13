@@ -360,7 +360,7 @@ bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int
     }
 
     // Send GET_VERSION command (no payload)
-    UsbPacket pkt;
+    UsbPacket pkt = {};
     pkt.command = USB_COMMAND_GET_VERSION;
     pkt.data_length = 0;
     queueFrame(usbFrame(&pkt));
@@ -496,8 +496,8 @@ void RobotiqTactileSensor::threadLoop()
 
 void RobotiqTactileSensor::collectData()
 {
-    UsbPacket send;
-    UsbPacket recv;
+    UsbPacket send = {};
+    UsbPacket recv = {};
     unsigned int recvSoFar = 0;
 
     // Timer for timestamps
