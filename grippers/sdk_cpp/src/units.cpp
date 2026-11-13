@@ -116,23 +116,20 @@ std::optional<double> openingFromRegister(uint8_t value, const DeviceProfile& pr
 
 std::optional<uint8_t> knuckleAngleToRegister(double angle, const DeviceProfile& profile)
 {
-   const Range<double> sweep{0.0, profile.knuckleAngleRange()};
-   if(!std::isfinite(angle) || !sweep.isValid())
+   if(!profile.hasKnuckle() || !std::isfinite(angle))
    {
       return std::nullopt;
    }
-   return registerAtClosingRatio(sweep.clampedRatioAt(angle), profile);
+   return roundedRegister(std::clamp(profile.openPosition + angle / profile.knuckleAnglePerCount, 0.0, 255.0));
 }
 
 std::optional<double> knuckleAngleFromRegister(uint8_t value, const DeviceProfile& profile)
 {
-   const Range<double> sweep{0.0, profile.knuckleAngleRange()};
-   const std::optional<double> closing = closingRatio(value, profile);
-   if(!closing || !sweep.isValid())
+   if(!profile.hasKnuckle())
    {
       return std::nullopt;
    }
-   return sweep.valueAt(*closing);
+   return profile.knuckleAnglePerCount * (value - profile.openPosition);
 }
 
 std::optional<uint8_t> effortToRegister(double effort)
