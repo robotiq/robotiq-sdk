@@ -35,6 +35,16 @@ inline constexpr double kAmperesPerRegisterStep = 0.010;
 [[nodiscard]] std::optional<uint8_t> registerFromSpan(double value, double minimum, double maximum);
 
 //! \ingroup units
+//! Register value 0..255 -> the value in [minimum, maximum] that
+//! registerFromSpan maps back to it.
+//! \param value The register value.
+//! \param minimum The value at register 0.
+//! \param maximum The value at register 255.
+//! \return The value, or std::nullopt if \p minimum or \p maximum is
+//!         non-finite, or \p maximum is at or below \p minimum.
+[[nodiscard]] std::optional<double> registerToValueInSpan(uint8_t value, double minimum, double maximum);
+
+//! \ingroup units
 //! Speed in m/s -> rSP.
 //! \param speed Requested speed, in m/s. A value below profile.minSpeed
 //!        floors at register 0; a value above profile.maxSpeed

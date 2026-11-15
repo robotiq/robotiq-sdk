@@ -68,6 +68,16 @@ std::optional<uint8_t> registerFromSpan(double value, double minimum, double max
    return registerFromSpan(value, {minimum, maximum});
 }
 
+std::optional<double> registerToValueInSpan(uint8_t value, double minimum, double maximum)
+{
+   const Range<double> range{minimum, maximum};
+   if(!range.isValid())
+   {
+      return std::nullopt;
+   }
+   return range.valueAt(value / 255.0);
+}
+
 std::optional<uint8_t> speedToRegister(double speed, const DeviceProfile& profile)
 {
    return registerFromSpan(speed, {profile.minSpeed, profile.maxSpeed});
