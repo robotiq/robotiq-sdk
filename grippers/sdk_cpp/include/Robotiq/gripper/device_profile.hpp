@@ -65,6 +65,7 @@ struct NamedProfile
    DeviceProfile profile; //!< The profile with that name
 };
 
+// BEGIN generated from data/device_profiles.json by tools/generate_device_profiles.py
 //! \ingroup units
 //! \brief The measured profile for the 2F-85
 //!
@@ -96,7 +97,7 @@ inline constexpr DeviceProfile kHandE100{0.020, 0.150, 0.0, 0.100, 3, 250, 0.0};
 inline constexpr DeviceProfile kHandEC10{0.014, 0.107, 0.0, 0.040, 3, 250, 0.0};
 
 //! \ingroup units
-//! \brief Every shipped profile with its stable name, in the order above.
+//! \brief Every shipped profile with its stable name, in data/device_profiles.json order.
 inline constexpr std::array<NamedProfile, 5> kNamed{{
    {"2f_85", k2F85},
    {"2f_140", k2F140},
@@ -104,6 +105,7 @@ inline constexpr std::array<NamedProfile, 5> kNamed{{
    {"hand_e_100", kHandE100},
    {"hand_e_c10", kHandEC10},
 }};
+// END generated
 
 //! \ingroup units
 //! \brief The shipped profile called \p name, or std::nullopt if there is none.

@@ -26,8 +26,8 @@ const DeviceProfile& kHandE = profiles::kHandE;
 using namespace Robotiq::units;
 } // namespace
 
-// Each shipped profile: its manual ranges, its measured band, and an opening
-// between the ends with the register it rounds to.
+// Each shipped profile: its manual ranges, its measured band, its knuckle slope,
+// and an opening between the ends with the register it rounds to.
 struct ShippedProfile
 {
    const char* name;
@@ -37,6 +37,7 @@ struct ShippedProfile
    double maxOpening;
    uint8_t openPosition;
    uint8_t closedPosition;
+   double knuckleAnglePerCount;
    double midOpening;
    uint8_t midPosition;
 };
@@ -51,11 +52,11 @@ void PrintTo(const ShippedProfile& shipped, std::ostream* out)
 const std::vector<ShippedProfile>& shippedProfiles()
 {
    static const std::vector<ShippedProfile> kShipped = {
-      {"k2F85", profiles::k2F85, 0.020, 0.150, 0.085, 3, 230, 0.0425, 117}, // 113.5 steps
-      {"k2F140", profiles::k2F140, 0.030, 0.250, 0.140, 3, 230, 0.070, 117}, // 113.5 steps
-      {"kHandE", profiles::kHandE, 0.020, 0.150, 0.050, 3, 250, 0.025, 127}, // 123.5 steps
-      {"kHandE100", profiles::kHandE100, 0.020, 0.150, 0.100, 3, 250, 0.050, 127}, // 123.5 steps
-      {"kHandEC10", profiles::kHandEC10, 0.014, 0.107, 0.040, 3, 250, 0.020, 127}, // 123.5 steps
+      {"k2F85", profiles::k2F85, 0.020, 0.150, 0.085, 3, 230, 0.7929 / 227.0, 0.0425, 117}, // 113.5 steps
+      {"k2F140", profiles::k2F140, 0.030, 0.250, 0.140, 3, 230, 0.77 / 227.0, 0.070, 117}, // 113.5 steps
+      {"kHandE", profiles::kHandE, 0.020, 0.150, 0.050, 3, 250, 0.0, 0.025, 127}, // 123.5 steps
+      {"kHandE100", profiles::kHandE100, 0.020, 0.150, 0.100, 3, 250, 0.0, 0.050, 127}, // 123.5 steps
+      {"kHandEC10", profiles::kHandEC10, 0.014, 0.107, 0.040, 3, 250, 0.0, 0.020, 127}, // 123.5 steps
    };
    return kShipped;
 }
@@ -73,6 +74,7 @@ TEST_P(ShippedProfileTest, carries_the_manual_ranges_and_the_measured_register_b
    EXPECT_DOUBLE_EQ(shipped.profile.maxOpening, shipped.maxOpening);
    EXPECT_EQ(shipped.profile.openPosition, shipped.openPosition);
    EXPECT_EQ(shipped.profile.closedPosition, shipped.closedPosition);
+   EXPECT_DOUBLE_EQ(shipped.profile.knuckleAnglePerCount, shipped.knuckleAnglePerCount);
    EXPECT_DOUBLE_EQ(shipped.profile.registerPositionRange(), shipped.closedPosition - shipped.openPosition);
 }
 
