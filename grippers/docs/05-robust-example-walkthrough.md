@@ -45,37 +45,24 @@ if(parsed < kMinBaudrate || parsed > kMaxBaudrate)
 The lower bound matters: `std::stoul("-1")` doesn't throw — it silently
 wraps to a huge unsigned value that the `< kMinBaudrate` check catches.
 
-The last argument names the gripper, one of the profiles the SDK ships:
-
-<!-- snippet: move_gripper.cpp model-profiles -->
-```cpp
-constexpr std::array<std::pair<std::string_view, DeviceProfile>, 5> kProfiles{{
-   {"2f85", Robotiq::profiles::k2F85},
-   {"2f140", Robotiq::profiles::k2F140},
-   {"hande", Robotiq::profiles::kHandE},
-   {"hande_100", Robotiq::profiles::kHandE100},
-   {"hande_c10", Robotiq::profiles::kHandEC10},
-}};
-```
-
-Without it the example drives the first entry, a 2F-85; an unknown
-name prints the usage, built from the same table, and stops:
+The last argument names the gripper by one of the stable names the SDK
+ships (`2f_85`, `2f_140`, `hand_e`, `hand_e_100`, `hand_e_c10`, listed in
+`profiles::kNamed`). Without it the example drives `kDefaultModel`,
+`2f_85`, chosen by name so that reordering the data file does not change
+it. `profiles::profileNamed` looks the name up, and an unknown name prints
+the usage, built from the same table, and stops:
 
 <!-- snippet: move_gripper.cpp model-selection -->
 ```cpp
-DeviceProfile profile = kProfiles.front().second;
-if(argc > 3)
+const char* const model = argc > 3 ? argv[3] : kDefaultModel;
+const std::optional<DeviceProfile> named = Robotiq::profiles::profileNamed(model);
+if(!named)
 {
-   const auto named =
-      std::find_if(kProfiles.begin(), kProfiles.end(), [&](const auto& entry) { return entry.first == argv[3]; });
-   if(named == kProfiles.end())
-   {
-      std::cerr << "Unknown model '" << argv[3] << "'\n";
-      printUsage(argv[0]);
-      return EXIT_FAILURE;
-   }
-   profile = named->second;
+   std::cerr << "Unknown model '" << model << "'\n";
+   printUsage(argv[0]);
+   return EXIT_FAILURE;
 }
+const DeviceProfile profile = *named;
 ```
 
 Every conversion below takes that profile: the speed is its full scale,

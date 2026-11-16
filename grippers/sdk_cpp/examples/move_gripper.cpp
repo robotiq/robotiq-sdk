@@ -7,15 +7,11 @@
 //! jaws clear.
 //! Usage: move_gripper <port> [baudrate] [model]
 
-#include <algorithm> // std::find_if over the profile table
-#include <array> // the table of shipped profiles below
 #include <cstdlib> // EXIT_SUCCESS / EXIT_FAILURE, main()'s return codes below — unrelated to Gripper itself
 #include <memory> // smart pointers: std::unique_ptr to own the Gripper, std::shared_ptr for the Logger it takes
-#include <optional> // std::optional from the unit-conversion functions below
+#include <optional> // std::optional from profileNamed() and the unit-conversion functions below
 #include <iostream> // std::cerr for usage errors
 #include <string> // std::stoul (baudrate parsing)
-#include <string_view> // profile names
-#include <utility> // std::pair in the profile table
 
 #include <Robotiq/gripper.hpp> // Gripper, GripperCommand/Status
 #include <Robotiq/gripper/device_profile.hpp> // DeviceProfile and the shipped profiles
@@ -37,28 +33,17 @@ constexpr unsigned long kMinBaudrate = 1;
 constexpr unsigned long kMaxBaudrate = 1000000;
 //! [baudrate-bounds]
 
-// The third argument names one of the profiles the SDK ships; the first
-// entry is the default.
-//! [model-profiles]
-constexpr std::array<std::pair<std::string_view, DeviceProfile>, 5> kProfiles{{
-   {"2f85", Robotiq::profiles::k2F85},
-   {"2f140", Robotiq::profiles::k2F140},
-   {"hande", Robotiq::profiles::kHandE},
-   {"hande_100", Robotiq::profiles::kHandE100},
-   {"hande_c10", Robotiq::profiles::kHandEC10},
-}};
-//! [model-profiles]
-
 constexpr double kEffort = 1.0; // maximum grip effort
+constexpr const char* kDefaultModel = "2f_85";
 
 // Shared by the argument checks below.
 void printUsage(const char* program)
 {
    std::cerr << "Usage: " << program << " <port> [baudrate] [model]\n"
-             << "  model: " << kProfiles.front().first << " (default)";
-   for(auto entry = kProfiles.begin() + 1; entry != kProfiles.end(); ++entry)
+             << "  model:";
+   for(const Robotiq::profiles::NamedProfile& entry : Robotiq::profiles::kNamed)
    {
-      std::cerr << ", " << entry->first;
+      std::cerr << ' ' << entry.name << (entry.name == kDefaultModel ? " (default)" : "");
    }
    std::cerr << '\n';
 }
@@ -103,19 +88,15 @@ int main(int argc, char* argv[])
    }
 
    //! [model-selection]
-   DeviceProfile profile = kProfiles.front().second;
-   if(argc > 3)
+   const char* const model = argc > 3 ? argv[3] : kDefaultModel;
+   const std::optional<DeviceProfile> named = Robotiq::profiles::profileNamed(model);
+   if(!named)
    {
-      const auto named =
-         std::find_if(kProfiles.begin(), kProfiles.end(), [&](const auto& entry) { return entry.first == argv[3]; });
-      if(named == kProfiles.end())
-      {
-         std::cerr << "Unknown model '" << argv[3] << "'\n";
-         printUsage(argv[0]);
-         return EXIT_FAILURE;
-      }
-      profile = named->second;
+      std::cerr << "Unknown model '" << model << "'\n";
+      printUsage(argv[0]);
+      return EXIT_FAILURE;
    }
+   const DeviceProfile profile = *named;
    //! [model-selection]
 
    // The SDK logs through an injectable sink; naming the instances
