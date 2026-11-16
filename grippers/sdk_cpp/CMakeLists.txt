@@ -226,11 +226,15 @@ install(EXPORT grippers_targets
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/grippers
 )
 
+set(GRIPPERS_DEVICE_PROFILES_INSTALL_PATH ${CMAKE_INSTALL_DATADIR}/grippers/device_profiles.json)
+install(FILES ${GRIPPERS_DEVICE_PROFILES_JSON} DESTINATION ${CMAKE_INSTALL_DATADIR}/grippers)
+
 include(CMakePackageConfigHelpers)
 configure_package_config_file(
   cmake/grippers-config.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/grippers-config.cmake
   INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/grippers
+  PATH_VARS GRIPPERS_DEVICE_PROFILES_INSTALL_PATH
 )
 write_basic_package_version_file(
   ${CMAKE_CURRENT_BINARY_DIR}/grippers-config-version.cmake

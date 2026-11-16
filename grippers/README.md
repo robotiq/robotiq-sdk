@@ -39,8 +39,10 @@ at 3.0.0.
 The documented API, which that policy covers, is what this README and the
 headers under `Robotiq/gripper/` describe — `Gripper`, the command/status blocks,
 `ConnectionConfig`, `Serial`, `Platform`, `Logger`, the `toString()` free
-functions, `DeviceProfile` and the SI unit conversions, and
-`GripperModbusClient` for the no-thread path. The text `toString()` renders is
+functions, `DeviceProfile`, the shipped profiles with their stable names and
+the installed `share/grippers/device_profiles.json` they are generated from
+(see [Commanding in SI units](docs/03-how-it-works.md#commanding-in-si-units)),
+the SI unit conversions, and `GripperModbusClient` for the no-thread path. The text `toString()` renders is
 for people, not parsers: its layout may change in any release. Everything
 under `Robotiq/detail/` is internal and may change in any release.
 

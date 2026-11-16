@@ -168,11 +168,20 @@ takes. `profiles::profileNamed("hand_e_c10")` returns that profile, or
 `std::nullopt` for an unknown name, and `profiles::kNamed` lists them all.
 
 The profiles come from one data file, `sdk_cpp/data/device_profiles.json`,
-which `device_profile.hpp` is generated from. Speeds
+which `device_profile.hpp` is generated from. It installs with the SDK at
+`share/grippers/device_profiles.json`; after `find_package(grippers)`,
+`grippers_DEVICE_PROFILES` holds its absolute path, so programs in other
+languages read the same values instead of copying them. Speeds
 (`min_speed`, `max_speed`) are in m/s, openings (`min_opening`,
 `max_opening`) in m, register positions (`open_position`,
 `closed_position`) in counts from 0 to 255, and `knuckle_closed_angle` in
 rad at `closed_position` (`0.0` without a knuckle).
+
+The contract for programs in other languages is each profile's `name` and
+its numeric fields. `constant` (the C++ name) and `doc` (its Doxygen
+comment) serve the generated header only. `schema_version` changes when
+that contract changes, so a reader should check it and refuse a version it
+does not know.
 
 To change a shipped profile, edit the JSON, then run
 `cmake --build build --target update_device_profiles` and commit both files.
