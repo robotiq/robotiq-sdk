@@ -4,7 +4,10 @@
 
 #pragma once
 
+#include <array>
 #include <cstdint>
+#include <optional>
+#include <string_view>
 
 namespace Robotiq {
 
@@ -55,6 +58,14 @@ struct DeviceProfile
 
 namespace profiles {
 //! \ingroup units
+//! \brief A shipped profile and its stable name.
+struct NamedProfile
+{
+   std::string_view name; //!< Stable name, as robotiq-ros's gripper_profile spells it
+   DeviceProfile profile; //!< The profile with that name
+};
+
+//! \ingroup units
 //! \brief The measured profile for the 2F-85
 //!
 //! \warning Assumes that the gripper is in parallel-finger mode.
@@ -83,6 +94,31 @@ inline constexpr DeviceProfile kHandE100{0.020, 0.150, 0.0, 0.100, 3, 250, 0.0};
 //!
 //! Opening is the diameter between the three fingertips.
 inline constexpr DeviceProfile kHandEC10{0.014, 0.107, 0.0, 0.040, 3, 250, 0.0};
+
+//! \ingroup units
+//! \brief Every shipped profile with its stable name, in the order above.
+inline constexpr std::array<NamedProfile, 5> kNamed{{
+   {"2f_85", k2F85},
+   {"2f_140", k2F140},
+   {"hand_e", kHandE},
+   {"hand_e_100", kHandE100},
+   {"hand_e_c10", kHandEC10},
+}};
+
+//! \ingroup units
+//! \brief The shipped profile called \p name, or std::nullopt if there is none.
+//! \param name A stable name such as "hand_e_c10", matched exactly, case included.
+[[nodiscard]] constexpr std::optional<DeviceProfile> profileNamed(std::string_view name)
+{
+   for(const NamedProfile& entry : kNamed)
+   {
+      if(entry.name == name)
+      {
+         return entry.profile;
+      }
+   }
+   return std::nullopt;
+}
 
 } // namespace profiles
 

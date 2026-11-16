@@ -136,6 +136,32 @@ TEST(TestDeviceProfile, a_profile_written_without_a_knuckle_slope_has_no_angle)
    EXPECT_EQ(openingToRegister(0.0, custom), 226);
 }
 
+static_assert(profiles::profileNamed("hand_e")->closedPosition == 250);
+
+TEST(TestProfileNamed, every_stable_name_finds_its_constant)
+{
+   EXPECT_EQ(profiles::profileNamed("2f_85")->closedPosition, profiles::k2F85.closedPosition);
+   EXPECT_DOUBLE_EQ(profiles::profileNamed("2f_140")->maxOpening, profiles::k2F140.maxOpening);
+   EXPECT_DOUBLE_EQ(profiles::profileNamed("hand_e")->maxOpening, profiles::kHandE.maxOpening);
+   EXPECT_DOUBLE_EQ(profiles::profileNamed("hand_e_100")->maxOpening, profiles::kHandE100.maxOpening);
+   EXPECT_DOUBLE_EQ(profiles::profileNamed("hand_e_c10")->maxSpeed, profiles::kHandEC10.maxSpeed);
+}
+
+TEST(TestProfileNamed, an_unknown_or_old_spelling_finds_nothing)
+{
+   EXPECT_FALSE(profiles::profileNamed("2f85").has_value());
+   EXPECT_FALSE(profiles::profileNamed("hande").has_value());
+   EXPECT_FALSE(profiles::profileNamed("2F_85").has_value());
+   EXPECT_FALSE(profiles::profileNamed("").has_value());
+}
+
+TEST(TestProfileNamed, the_table_lists_the_profiles_in_file_order)
+{
+   ASSERT_EQ(profiles::kNamed.size(), 5u);
+   EXPECT_EQ(profiles::kNamed.front().name, "2f_85");
+   EXPECT_EQ(profiles::kNamed.back().name, "hand_e_c10");
+}
+
 TEST(TestNormalizedToRegister, the_unit_span_maps_onto_the_whole_byte_open_to_closed)
 {
    EXPECT_EQ(normalizedToRegister(0.0), 0); // fully open
