@@ -25,6 +25,7 @@ except ImportError:
     serial = None
 
 from protocol import UsbPacketParser, SensorData, FingerData
+from device_info import UNSUPPORTED_LINES, device_info_lines, read_devices_info, supports_devices_info
 from protocol import (
     UsbPacketParser, SensorData,
     SENSOR_TYPE_STATIC_TACTILE, SENSOR_TYPE_DYNAMIC_TACTILE,
@@ -124,6 +125,7 @@ class SensorMonitor:
 
         # Sensor info
         self.firmware_version = ""
+        self.devices_info_lines: List[str] = []
 
         # Per-finger baseline for static tactile (28 taxels each)
         self.baseline = [[0] * 28 for _ in range(NUM_FINGERS)]
@@ -197,6 +199,7 @@ class SensorMonitor:
 
             # Read firmware verison
             self.read_firmware_version()
+            self.read_devices_info()
 
             return True
 
@@ -206,6 +209,14 @@ class SensorMonitor:
 
     def read_firmware_version(self):
         self.firmware_version = self.parser.print_firmware_version(self.serial_port)
+
+    def read_devices_info(self):
+        if supports_devices_info(self.firmware_version):
+            self.devices_info_lines = device_info_lines(read_devices_info(self.serial_port))
+        else:
+            self.devices_info_lines = UNSUPPORTED_LINES
+        for line in self.devices_info_lines:
+            print(line)
 
 
     def start_autosend(self, period_ms: int = 1):
@@ -309,6 +320,8 @@ class SensorMonitor:
         lines.append(f"Data Rate: {self.data_rate_kbs:.3f} KB/s  |  "
                      f"Refresh Rate: {self.refresh_rate_hz:.1f} Hz  |  "
                      f"Total Packets: {self.total_packets}")
+        lines.append("=" * 80)
+        lines.extend(self.devices_info_lines)
         lines.append("=" * 80)
         lines.append("")
 
