@@ -68,7 +68,7 @@ std::optional<uint8_t> registerFromSpan(double value, double minimum, double max
    return registerFromSpan(value, {minimum, maximum});
 }
 
-std::optional<double> registerToValueInSpan(uint8_t value, double minimum, double maximum)
+std::optional<double> valueInSpanFromRegister(uint8_t value, double minimum, double maximum)
 {
    const Range<double> range{minimum, maximum};
    if(!range.isValid())

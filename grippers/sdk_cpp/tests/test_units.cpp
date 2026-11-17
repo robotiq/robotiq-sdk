@@ -230,12 +230,12 @@ TEST(TestRegisterToValueInSpan, every_register_maps_back_to_itself)
 {
    for(const auto& [minimum, maximum] : {std::pair{20.0, 235.0}, std::pair{0.0, 0.075}, std::pair{0.007, 0.0535}})
    {
-      EXPECT_DOUBLE_EQ(registerToValueInSpan(0, minimum, maximum).value(), minimum);
-      EXPECT_DOUBLE_EQ(registerToValueInSpan(255, minimum, maximum).value(), maximum);
+      EXPECT_DOUBLE_EQ(valueInSpanFromRegister(0, minimum, maximum).value(), minimum);
+      EXPECT_DOUBLE_EQ(valueInSpanFromRegister(255, minimum, maximum).value(), maximum);
       for(int count = 0; count <= 0xFF; ++count)
       {
          const auto raw = static_cast<uint8_t>(count);
-         EXPECT_EQ(registerFromSpan(registerToValueInSpan(raw, minimum, maximum).value(), minimum, maximum), raw)
+         EXPECT_EQ(registerFromSpan(valueInSpanFromRegister(raw, minimum, maximum).value(), minimum, maximum), raw)
             << minimum << ".." << maximum << " count " << count;
       }
    }
@@ -243,10 +243,10 @@ TEST(TestRegisterToValueInSpan, every_register_maps_back_to_itself)
 
 TEST(TestRegisterToValueInSpan, rejects_a_span_registerFromSpan_rejects)
 {
-   EXPECT_FALSE(registerToValueInSpan(100, 20.0, 20.0).has_value());
-   EXPECT_FALSE(registerToValueInSpan(100, 235.0, 20.0).has_value());
-   EXPECT_FALSE(registerToValueInSpan(100, kNaN, 235.0).has_value());
-   EXPECT_FALSE(registerToValueInSpan(100, 20.0, kInf).has_value());
+   EXPECT_FALSE(valueInSpanFromRegister(100, 20.0, 20.0).has_value());
+   EXPECT_FALSE(valueInSpanFromRegister(100, 235.0, 20.0).has_value());
+   EXPECT_FALSE(valueInSpanFromRegister(100, kNaN, 235.0).has_value());
+   EXPECT_FALSE(valueInSpanFromRegister(100, 20.0, kInf).has_value());
 }
 
 TEST(TestSpeedToRegister, the_manual_range_spans_the_whole_byte)
