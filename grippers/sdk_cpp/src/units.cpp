@@ -57,13 +57,23 @@ std::optional<uint8_t> registerAtClosingRatio(double ratio, const DeviceProfile&
    {
       return std::nullopt;
    }
-   return roundedRegister(positionBand(profile).valueAt(std::clamp(ratio, 0.0, 1.0)));
+   return roundedRegister(positionBand(profile).clampedValueAt(ratio));
 }
 } // namespace
 
 std::optional<uint8_t> registerFromSpan(double value, double minimum, double maximum)
 {
    return registerFromSpan(value, {minimum, maximum});
+}
+
+std::optional<double> valueInSpanFromRegister(uint8_t value, double minimum, double maximum)
+{
+   const Range<double> range{minimum, maximum};
+   if(minimum < 0.0 || !range.isValid())
+   {
+      return std::nullopt;
+   }
+   return range.valueAt(value / 255.0);
 }
 
 std::optional<uint8_t> speedToRegister(double speed, const DeviceProfile& profile)
@@ -116,23 +126,21 @@ std::optional<double> openingFromRegister(uint8_t value, const DeviceProfile& pr
 
 std::optional<uint8_t> knuckleAngleToRegister(double angle, const DeviceProfile& profile)
 {
-   const Range<double> sweep{0.0, profile.knuckleAngleRange()};
-   if(!std::isfinite(angle) || !sweep.isValid())
+   if(!profile.hasKnuckle() || !std::isfinite(angle))
    {
       return std::nullopt;
    }
-   return registerAtClosingRatio(sweep.clampedRatioAt(angle), profile);
+   const double counts = profile.openPosition + angle / profile.knuckleAnglePerCount;
+   return roundedRegister(std::clamp(counts, 0.0, 255.0));
 }
 
 std::optional<double> knuckleAngleFromRegister(uint8_t value, const DeviceProfile& profile)
 {
-   const Range<double> sweep{0.0, profile.knuckleAngleRange()};
-   const std::optional<double> closing = closingRatio(value, profile);
-   if(!closing || !sweep.isValid())
+   if(!profile.hasKnuckle())
    {
       return std::nullopt;
    }
-   return sweep.valueAt(*closing);
+   return profile.knuckleAnglePerCount * (value - profile.openPosition);
 }
 
 std::optional<uint8_t> effortToRegister(double effort)

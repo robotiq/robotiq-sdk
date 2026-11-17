@@ -55,6 +55,14 @@ TEST(TestRange, the_clamped_ratio_stops_at_the_limits)
    EXPECT_DOUBLE_EQ(range.clampedRatioAt(1.0), 1.0);
 }
 
+TEST(TestRange, the_clamped_value_stops_at_the_limits)
+{
+   constexpr Range<double> range{0.0, 255.0};
+   EXPECT_DOUBLE_EQ(range.clampedValueAt(-0.5), 0.0);
+   EXPECT_DOUBLE_EQ(range.clampedValueAt(0.5), 127.5);
+   EXPECT_DOUBLE_EQ(range.clampedValueAt(1.5), 255.0);
+}
+
 TEST(TestRange, rejects_an_interval_the_arithmetic_cannot_use)
 {
    EXPECT_TRUE((Range<double>{0.0, 1.0}.isValid()));

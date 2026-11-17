@@ -28,10 +28,10 @@ public:
    {
       return (static_cast<double>(value) - static_cast<double>(_lower)) / span();
    }
-
    [[nodiscard]] constexpr double clampedRatioAt(T value) const { return std::clamp(ratioAt(value), 0.0, 1.0); }
 
    [[nodiscard]] constexpr double valueAt(double ratio) const { return static_cast<double>(_lower) + ratio * span(); }
+   [[nodiscard]] constexpr double clampedValueAt(double ratio) const { return valueAt(std::clamp(ratio, 0.0, 1.0)); }
 
    [[nodiscard]] constexpr bool isValid() const { return span() > 0.0 && span() <= std::numeric_limits<double>::max(); }
 
