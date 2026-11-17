@@ -54,12 +54,29 @@ jobs:
       - name: Web viewer smoke test
         run: python sensor_quickstart/tools/smoke_web_viewer.py
 
+  # bootloader_host.py against a simulated hub (tsf/firmware/tests): no
+  # hardware, hidapi or pyserial needed.
+  firmware:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.13']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install pytest
+      - run: python -m pytest firmware/tests -v
+
   # The one status check branch protection requires. Depends on every job
   # above: add new jobs here, never to the rule. `if: always()` makes it run
   # when a dependency failed; anything but success fails the gate.
   tsf-ci-gate:
     if: always()
-    needs: [sdk-cpp, python]
+    needs: [sdk-cpp, python, firmware]
     runs-on: ubuntu-latest
     # No checkout in this job, so tsf/ does not exist here: run from the
     # workspace instead of the workflow default.
