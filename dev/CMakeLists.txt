@@ -12,8 +12,8 @@
 cmake_minimum_required(VERSION 3.16)
 project(robotiq_sdk_ide LANGUAGES C CXX)
 
-# Tests registered by the SDKs run from this build directory's ctest. Only the
-# grippers SDK registers any; the TSF SDK has no add_test().
+# Tests registered by the SDKs and by common/ run from this build directory's
+# ctest.
 enable_testing()
 
 # Pulled in through add_subdirectory(), the grippers SDK is not top level and
@@ -45,3 +45,8 @@ foreach(sdk IN LISTS ROBOTIQ_IDE_SDKS)
   string(REPLACE "/" "_" name ${sdk})
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../${sdk} ${CMAKE_CURRENT_BINARY_DIR}/${name})
 endforeach()
+
+# The tests of the shared modules. Last, so each module is already added by
+# an SDK and robotiq_link_common() reuses it, as it must when several SDKs
+# link one module.
+add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_CURRENT_BINARY_DIR}/common)

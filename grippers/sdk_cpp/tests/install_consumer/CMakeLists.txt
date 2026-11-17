@@ -11,3 +11,10 @@ if(NOT EXISTS "${grippers_DEVICE_PROFILES}")
   message(FATAL_ERROR "grippers_DEVICE_PROFILES does not name a file: '${grippers_DEVICE_PROFILES}'")
 endif()
 message(STATUS "grippers device profiles: ${grippers_DEVICE_PROFILES}")
+
+# Off for a freestanding install, which has no DefaultSerial to link.
+option(LINK_DEFAULT_SERIAL "Link a Gripper on the OS serial port" OFF)
+if(LINK_DEFAULT_SERIAL)
+  add_executable(consumer consumer.cpp)
+  target_link_libraries(consumer PRIVATE Robotiq::grippers)
+endif()

@@ -176,8 +176,9 @@ It checks the data first and stops with an `error:` line naming the profile
 and field at fault; the `check_...` functions of the script are the list of
 rules. One rule is not obvious: no generated line may be longer than 120
 columns, and no `doc` line may end with a space or hold a tab. clang-format
-(`ColumnLimit` in `grippers/.clang-format`) would rewrite such lines, and
-the format job and the drift check would then disagree about the block.
+(`ColumnLimit` in the repository's `.clang-format`) would rewrite such
+lines, and the format job and the drift check would then disagree about the
+block.
 
 After editing the JSON, from `grippers/`, with the build directory of
 [the documented configure](../../docs/01-environment-setup.md) (`build`):
