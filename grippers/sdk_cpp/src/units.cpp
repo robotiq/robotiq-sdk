@@ -28,8 +28,6 @@ constexpr Range<double> openingSpan(const DeviceProfile& profile)
    return {profile.minOpening, profile.maxOpening};
 }
 
-constexpr Range<double> kRegisterRange{0.0, 255.0};
-
 uint8_t roundedRegister(double steps)
 {
    return static_cast<uint8_t>(std::lround(steps));
@@ -71,7 +69,7 @@ std::optional<uint8_t> registerFromSpan(double value, double minimum, double max
 std::optional<double> valueInSpanFromRegister(uint8_t value, double minimum, double maximum)
 {
    const Range<double> range{minimum, maximum};
-   if(!range.isValid())
+   if(minimum < 0.0 || !range.isValid())
    {
       return std::nullopt;
    }
@@ -133,7 +131,7 @@ std::optional<uint8_t> knuckleAngleToRegister(double angle, const DeviceProfile&
       return std::nullopt;
    }
    const double counts = profile.openPosition + angle / profile.knuckleAnglePerCount;
-   return roundedRegister(kRegisterRange.clampedValueAt(kRegisterRange.ratioAt(counts)));
+   return roundedRegister(std::clamp(counts, 0.0, 255.0));
 }
 
 std::optional<double> knuckleAngleFromRegister(uint8_t value, const DeviceProfile& profile)

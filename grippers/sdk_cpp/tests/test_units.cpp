@@ -226,7 +226,7 @@ TEST(TestRegisterFromSpan, rejects_what_has_no_register_value)
    EXPECT_FALSE(registerFromSpan(50.0, 20.0, kInf).has_value());
 }
 
-TEST(TestRegisterToValueInSpan, every_register_maps_back_to_itself)
+TEST(TestValueInSpanFromRegister, every_register_maps_back_to_itself)
 {
    for(const auto& [minimum, maximum] : {std::pair{20.0, 235.0}, std::pair{0.0, 0.075}, std::pair{0.007, 0.0535}})
    {
@@ -241,12 +241,13 @@ TEST(TestRegisterToValueInSpan, every_register_maps_back_to_itself)
    }
 }
 
-TEST(TestRegisterToValueInSpan, rejects_a_span_registerFromSpan_rejects)
+TEST(TestValueInSpanFromRegister, rejects_a_span_registerFromSpan_rejects)
 {
    EXPECT_FALSE(valueInSpanFromRegister(100, 20.0, 20.0).has_value());
    EXPECT_FALSE(valueInSpanFromRegister(100, 235.0, 20.0).has_value());
    EXPECT_FALSE(valueInSpanFromRegister(100, kNaN, 235.0).has_value());
    EXPECT_FALSE(valueInSpanFromRegister(100, 20.0, kInf).has_value());
+   EXPECT_FALSE(valueInSpanFromRegister(100, -1.0, 1.0).has_value());
 }
 
 TEST(TestSpeedToRegister, the_manual_range_spans_the_whole_byte)
@@ -420,6 +421,19 @@ TEST(TestKnuckleAngle, the_slope_survives_fingertips_that_meet_early)
    EXPECT_DOUBLE_EQ(knuckleAngleFromRegister(thickTips.closedPosition, thickTips).value(),
                     k2F85.knuckleAnglePerCount * (thickTips.closedPosition - k2F85.openPosition));
    EXPECT_NEAR(knuckleAngleFromRegister(thickTips.closedPosition, thickTips).value(), 0.688, 1e-3);
+}
+
+TEST(TestKnuckleAngle, a_profile_with_no_register_band_has_no_angle_either_way)
+{
+   for(const auto& [open, closed] : {std::pair<uint8_t, uint8_t>{3, 3}, std::pair<uint8_t, uint8_t>{230, 3}})
+   {
+      DeviceProfile noBand = k2F85;
+      noBand.openPosition = open;
+      noBand.closedPosition = closed;
+      EXPECT_FALSE(noBand.hasKnuckle()) << +open << ".." << +closed;
+      EXPECT_FALSE(knuckleAngleToRegister(0.4, noBand).has_value()) << +open << ".." << +closed;
+      EXPECT_FALSE(knuckleAngleFromRegister(100, noBand).has_value()) << +open << ".." << +closed;
+   }
 }
 
 TEST(TestKnuckleAngle, a_gripper_with_no_knuckle_has_no_angle_either_way)

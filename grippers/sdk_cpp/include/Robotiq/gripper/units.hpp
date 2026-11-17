@@ -40,8 +40,9 @@ inline constexpr double kAmperesPerRegisterStep = 0.010;
 //! \param value The register value.
 //! \param minimum The value at register 0.
 //! \param maximum The value at register 255.
-//! \return The value, or std::nullopt if \p minimum or \p maximum is
-//!         non-finite, or \p maximum is at or below \p minimum.
+//! \return The value, or std::nullopt if \p minimum is negative,
+//!         \p minimum or \p maximum is non-finite, or \p maximum is at
+//!         or below \p minimum.
 [[nodiscard]] std::optional<double> valueInSpanFromRegister(uint8_t value, double minimum, double maximum);
 
 //! \ingroup units
