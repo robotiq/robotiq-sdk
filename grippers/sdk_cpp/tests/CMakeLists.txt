@@ -41,6 +41,7 @@ if(GRIPPERS_BUILD_FAKE)
     gripper_test_helpers.hpp
     test_gripper.cpp
     test_wait_for_exchange.cpp
+    test_exchange_pacer.cpp
     test_fake_gripper_server.cpp
     test_make_fake_gripper.cpp
   )

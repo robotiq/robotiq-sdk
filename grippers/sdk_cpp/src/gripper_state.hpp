@@ -15,6 +15,7 @@
 
 #include <Robotiq/gripper/command.hpp>
 #include <Robotiq/gripper/connection_state.hpp>
+#include <Robotiq/gripper/exchange_pacer.hpp>
 #include <Robotiq/gripper/logger.hpp>
 #include <Robotiq/gripper/platform.hpp>
 #include <Robotiq/gripper/serial.hpp>
@@ -31,7 +32,7 @@ class GripperState
 public:
    GripperState(std::unique_ptr<Serial> serial,
                 uint8_t slaveAddress,
-                std::chrono::microseconds exchangePeriod,
+                std::shared_ptr<ExchangePacer> pacer,
                 std::shared_ptr<Platform> os,
                 std::shared_ptr<Logger> log);
 
@@ -68,7 +69,7 @@ private:
    std::shared_ptr<Platform> _platform;
    GripperModbusClient _client;
    detail::Throttle _failureLogThrottle{std::chrono::milliseconds(1000)};
-   std::chrono::microseconds _period;
+   std::shared_ptr<ExchangePacer> _pacer;
 
    ProcessImage _image;
 

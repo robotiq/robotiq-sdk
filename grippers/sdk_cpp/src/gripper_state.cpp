@@ -4,7 +4,6 @@
 
 #include "gripper_state.hpp"
 
-#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -23,13 +22,13 @@ constexpr uint64_t kInitialReadAttempts = 3;
 
 GripperState::GripperState(std::unique_ptr<Serial> serial,
                            uint8_t slaveAddress,
-                           std::chrono::microseconds exchangePeriod,
+                           std::shared_ptr<ExchangePacer> pacer,
                            std::shared_ptr<Platform> os,
                            std::shared_ptr<Logger> log)
    : _logger(log ? std::move(log) : detail::makeDefaultLogger())
    , _platform(std::move(os))
    , _client(std::move(serial), slaveAddress, _logger)
-   , _period(exchangePeriod)
+   , _pacer(std::move(pacer))
    , _image(*_platform)
 {
 }
@@ -112,9 +111,13 @@ void GripperState::start()
 {
    _running.store(true);
    _exchangeThread = _platform->spawn([this] {
-      auto nextCycle = std::chrono::steady_clock::now();
-      while(_running.load())
+      while(true)
       {
+         _pacer->waitForNextCycle();
+         if(!_running.load())
+         {
+            break;
+         }
          try
          {
             exchangeOnce();
@@ -129,10 +132,6 @@ void GripperState::start()
             _failureLogThrottle.executeIfAllowed(
                [&] { _logger->log(Logger::Level::Warn, "exchange cycle failed: unknown exception"); });
          }
-         // Overrun cycles (e.g. timeouts during a fault) must not
-         // accumulate a backlog that bursts exchanges on recovery.
-         nextCycle = std::max(nextCycle + _period, std::chrono::steady_clock::now());
-         _platform->sleepUntil(nextCycle);
       }
    });
 }
@@ -169,8 +168,10 @@ void GripperState::stop() noexcept
 {
    _running.store(false);
    _image.close();
+   // Keeps a pacer from a failed construction reusable.
    if(_exchangeThread)
    {
+      _pacer->wake();
       _exchangeThread->join();
       _exchangeThread.reset();
    }

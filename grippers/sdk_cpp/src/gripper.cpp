@@ -5,6 +5,7 @@
 #include <Robotiq/gripper.hpp>
 
 #include "gripper_state.hpp"
+#include "periodic_pacer.hpp"
 
 #include <algorithm>
 #include <chrono>
@@ -32,6 +33,15 @@ std::shared_ptr<Platform> checkedPlatform(std::shared_ptr<Platform> platform)
    }
    return platform;
 }
+
+std::shared_ptr<ExchangePacer> checkedPacer(std::shared_ptr<ExchangePacer> pacer)
+{
+   if(!pacer)
+   {
+      throw DriverException("a null ExchangePacer was passed — pass a pacer, or use the exchangePeriod constructor");
+   }
+   return pacer;
+}
 } // namespace
 
 Gripper::Gripper(std::unique_ptr<Serial> serial,
@@ -39,9 +49,22 @@ Gripper::Gripper(std::unique_ptr<Serial> serial,
                  std::chrono::microseconds exchangePeriod,
                  std::shared_ptr<Platform> platform,
                  std::shared_ptr<Logger> logger)
+   : Gripper(std::move(serial),
+             slaveAddress,
+             std::make_shared<detail::PeriodicPacer>(exchangePeriod, checkedPlatform(platform)),
+             platform,
+             std::move(logger))
+{
+}
+
+Gripper::Gripper(std::unique_ptr<Serial> serial,
+                 uint8_t slaveAddress,
+                 std::shared_ptr<ExchangePacer> pacer,
+                 std::shared_ptr<Platform> platform,
+                 std::shared_ptr<Logger> logger)
    : _impl(std::make_unique<detail::GripperState>(std::move(serial),
                                                   slaveAddress,
-                                                  exchangePeriod,
+                                                  checkedPacer(std::move(pacer)),
                                                   checkedPlatform(std::move(platform)),
                                                   std::move(logger)))
 {

@@ -89,6 +89,19 @@ is the smallest complete example of wiring this together: it builds a
 `ThreadXPlatform`, a stub `Serial`, constructs a real `Gripper` on top
 of them, and calls `activate()` — a good starting skeleton to copy from.
 
+**Pacing exchanges on your own tick.** By default the exchange thread
+paces itself on the `exchangePeriod` you pass. If your firmware has a
+control tick the gripper's records must line up with, implement
+`Robotiq::ExchangePacer`
+([`exchange_pacer.hpp`](../sdk_cpp/include/Robotiq/gripper/exchange_pacer.hpp))
+and pass it in place of the period. Its `waitForNextCycle()` blocks on
+the tick (event flags set from the tick interrupt) and returns when an
+exchange should start. Count absolute tick indices, so an overrunning
+exchange skips a slot instead of shifting the phase. Its `wake()` must
+unblock that wait: the `Gripper` destructor calls it before joining the
+exchange thread. Activation, fault recovery and the process image all
+stay in the SDK.
+
 ### 2. No RTOS at all: skip `Gripper`, drive `GripperModbusClient` yourself
 
 If your firmware is a bare superloop (one `while(true)` that services

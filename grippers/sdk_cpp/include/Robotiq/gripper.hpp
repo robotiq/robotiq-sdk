@@ -14,6 +14,7 @@
 #include <Robotiq/gripper/activation_result.hpp>
 #include <Robotiq/gripper/connection_config.hpp>
 #include <Robotiq/gripper/connection_state.hpp>
+#include <Robotiq/gripper/exchange_pacer.hpp>
 #include <Robotiq/gripper/logger.hpp>
 #include <Robotiq/gripper/command.hpp>
 #include <Robotiq/gripper/stamped_exchange.hpp>
@@ -78,6 +79,14 @@ public:
    Gripper(std::unique_ptr<Serial> serial,
            uint8_t slaveAddress,
            std::chrono::microseconds exchangePeriod,
+           std::shared_ptr<Platform> platform,
+           std::shared_ptr<Logger> logger = nullptr);
+
+   //! \brief Like the constructor above, but \p pacer starts each exchange
+   //! instead of a fixed period; see ExchangePacer.
+   Gripper(std::unique_ptr<Serial> serial,
+           uint8_t slaveAddress,
+           std::shared_ptr<ExchangePacer> pacer,
            std::shared_ptr<Platform> platform,
            std::shared_ptr<Logger> logger = nullptr);
 

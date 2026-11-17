@@ -65,9 +65,9 @@ public:
 //! exception, not an alternative.
 //!
 //! **Concurrency contract for implementations:** the sleeps may be
-//! called from several threads at once (the exchange thread paces with
-//! sleepUntil() while a blocked procedure like activate() polls with
-//! sleepFor()); makeMutex(), makeConditionVariable() and spawn() are called
+//! called from several threads at once (a period-paced exchange thread
+//! sleeps with sleepUntil() while a blocked procedure like activate()
+//! polls with sleepFor()); makeMutex(), makeConditionVariable() and spawn() are called
 //! during gripper construction only.
 //!
 //! RTOS-specific integration caveats (a yielding Serial::read, the

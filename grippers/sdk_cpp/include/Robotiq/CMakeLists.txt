@@ -15,6 +15,7 @@ target_sources(grippers_objects PRIVATE
   gripper/device_profile.hpp
   gripper/units.hpp
   gripper/platform.hpp
+  gripper/exchange_pacer.hpp
   gripper/serial.hpp
   gripper/serial_config.hpp
   gripper/serial_io_exception.hpp
