@@ -3,6 +3,7 @@ USB Protocol Implementation for Robotiq Tactile Sensor
 Based on the protocol from tactile_sensor_ui/src/communicator.cpp
 """
 
+import re
 import struct
 import time
 from dataclasses import dataclass
@@ -20,6 +21,7 @@ USB_COMMAND_AUTOSEND_SYNC_SENSORS = 0x58
 USB_COMMAND_AUTOSEND_ASYNC_SENSORS = 0x59
 USB_COMMAND_ENTER_BOOTLOADER = 0xE2
 USB_COMMAND_GET_VERSION = 0XE3
+USB_COMMAND_GET_DEVICES_INFO = 0xE4
 
 # Sensor Type Identifiers (high nibble)
 SENSOR_TYPE_STATIC_TACTILE = 0x10
@@ -35,6 +37,18 @@ STATIC_TACTILE_SIZE = 28  # 7x4 grid (7 rows, 4 columns)
 DYNAMIC_TACTILE_SIZE = 1
 IMU_SIZE = 3  # 3 axes
 NUM_FINGERS = 2
+
+REPLY_TIMEOUT_S = 1.0
+
+# Device info (0xE4): EEA_row_struct, one row for the hub then one per finger:
+# id, hardware_version[4] = [product code, major, minor, patch], serial_number[8], production_year[2] (MSB first),
+# checksum.
+FIRST_FIRMWARE_WITH_DEVICES_INFO = (2, 1, 0)
+DEVICE_INFO_ROW_SIZE = 16
+DEVICE_INFO_ROW_COUNT = 1 + NUM_FINGERS
+DEVICE_INFO_ROW_ID = 0x01
+BLANK_HARDWARE_VERSIONS = ((0x00, 0x00, 0x00), (0xFF, 0xFF, 0xFF))
+BLANK_PRODUCTION_YEARS = (0x0000, 0xFFFF)
 
 
 @dataclass
@@ -79,7 +93,8 @@ class UsbPacketParser:
         self.sensor_data = SensorData()
         self.packet_count = 0
 
-    def create_command_packet(self, command: int, data: bytes = b'') -> bytes:
+    @staticmethod
+    def create_command_packet(command: int, data: bytes = b'') -> bytes:
         """Create a command packet to send to the sensor"""
         data_length = len(data)
         if data_length > USB_PACKET_MAX_DATA_SIZE:
@@ -306,3 +321,72 @@ class UsbPacketParser:
     def get_sensor_data(self) -> SensorData:
         """Get the current sensor data"""
         return self.sensor_data
+
+
+def request_reply(serial_port, command: int, length: int, timeout: float = REPLY_TIMEOUT_S) -> Optional[bytes]:
+    """Returns the data of the reply to `command`, which must be `length` bytes long, or None on timeout."""
+    serial_port.reset_input_buffer()
+    serial_port.write(UsbPacketParser.create_command_packet(command))
+    serial_port.flush()
+
+    buffer = bytearray()
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        buffer += serial_port.read(serial_port.in_waiting or 1)
+        while True:
+            start = buffer.find(USB_PACKET_START_BYTE)
+            if start < 0:
+                buffer.clear()
+                break
+            del buffer[:start]
+            # A hub left streaming by an earlier run, or a stream packet cut by the flush, can hold 0x9A ?? command
+            # in its data: only accept a header carrying both the command and the length expected.
+            if (len(buffer) >= 3 and buffer[2] != command) or (len(buffer) >= 4 and buffer[3] != length):
+                del buffer[:1]
+                continue
+            if len(buffer) < USB_PACKET_HEADER_SIZE + length:
+                break
+            return bytes(buffer[USB_PACKET_HEADER_SIZE:USB_PACKET_HEADER_SIZE + length])
+    return None
+
+
+@dataclass(frozen=True)
+class DeviceInfo:
+    product_code: int
+    hardware_version: Optional[Tuple[int, int, int]]  # None when production didn't write it
+    serial_number: str
+    production_year: Optional[int]
+
+
+def parse_device_info_row(row: bytes) -> Optional[DeviceInfo]:
+    """None for a row with a bad checksum or no device behind it."""
+    if (sum(row[:-1]) & 0xFF) != row[-1] or row[0] != DEVICE_INFO_ROW_ID:
+        return None
+    version = tuple(row[2:5])
+    year = (row[13] << 8) | row[14]
+    return DeviceInfo(
+        product_code=row[1],
+        hardware_version=None if version in BLANK_HARDWARE_VERSIONS else version,
+        serial_number=row[5:13].strip(b"\x00\xff ").decode("ascii", errors="replace"),
+        production_year=None if year in BLANK_PRODUCTION_YEARS else year,
+    )
+
+
+def parse_devices_info(data: bytes) -> Optional[List[Optional[DeviceInfo]]]:
+    """The hub then each finger, None for an invalid row; None for a reply of the wrong size."""
+    if len(data) != DEVICE_INFO_ROW_SIZE * DEVICE_INFO_ROW_COUNT:
+        return None
+    return [parse_device_info_row(data[i:i + DEVICE_INFO_ROW_SIZE])
+            for i in range(0, len(data), DEVICE_INFO_ROW_SIZE)]
+
+
+def read_devices_info(serial_port, timeout: float = REPLY_TIMEOUT_S) -> Optional[List[Optional[DeviceInfo]]]:
+    data = request_reply(serial_port, USB_COMMAND_GET_DEVICES_INFO,
+                         DEVICE_INFO_ROW_SIZE * DEVICE_INFO_ROW_COUNT, timeout)
+    return parse_devices_info(data) if data is not None else None
+
+
+def supports_devices_info(firmware_version: str) -> bool:
+    """Firmware older than 2.1.0 ignores 0xE4. An unreadable version is given the benefit of the doubt."""
+    match = re.search(r"(\d+)\.(\d+)\.(\d+)", firmware_version)
+    return not match or tuple(int(x) for x in match.groups()) >= FIRST_FIRMWARE_WITH_DEVICES_INFO
