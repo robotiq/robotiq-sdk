@@ -9,10 +9,13 @@ def reply(command, data):
 
 
 class FakeSerial:
-    def __init__(self, answer=b"", noise=b""):
-        self.answer = answer
+    """Answers each command with answers[command]; `chunk` caps the bytes a read returns."""
+
+    def __init__(self, answers=None, noise=b"", chunk=None, **_serial_settings):
+        self.answers = answers or {}
         self.pending = bytearray(noise)
         self.written = bytearray()
+        self.chunk = chunk
 
     @property
     def in_waiting(self):
@@ -21,14 +24,18 @@ class FakeSerial:
     def reset_input_buffer(self):
         pass
 
+    def reset_output_buffer(self):
+        pass
+
     def write(self, data):
         self.written += data
-        self.pending += self.answer
+        self.pending += self.answers.get(data[2], b"")
 
     def flush(self):
         pass
 
     def read(self, size=1):
+        size = min(size, self.chunk or size)
         data = bytes(self.pending[:size])
         del self.pending[:size]
         return data

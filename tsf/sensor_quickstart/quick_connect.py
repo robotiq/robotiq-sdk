@@ -25,7 +25,7 @@ except ImportError:
     serial = None
 
 from protocol import UsbPacketParser, SensorData, FingerData
-from device_info import UNSUPPORTED_LINES, device_info_lines, read_devices_info, supports_devices_info
+from device_info import UNSUPPORTED_LINES, device_info_lines
 from protocol import (
     UsbPacketParser, SensorData,
     SENSOR_TYPE_STATIC_TACTILE, SENSOR_TYPE_DYNAMIC_TACTILE,
@@ -34,6 +34,7 @@ from protocol import (
     SENSOR_TYPE_TIMESTAMP,
     STATIC_TACTILE_SIZE, DYNAMIC_TACTILE_SIZE, IMU_SIZE,
     USB_PACKET_HEADER_SIZE, USB_COMMAND_GET_VERSION,
+    read_devices_info, supports_devices_info,
 )
 
 # Tactile sensor Hub VID/PID
@@ -209,6 +210,8 @@ class SensorMonitor:
 
     def read_firmware_version(self):
         self.firmware_version = self.parser.print_firmware_version(self.serial_port)
+        # Bytes after the 0xE3 reply lose their continuity with the next reads, which flush the input
+        self.parser.buffer.clear()
 
     def read_devices_info(self):
         if supports_devices_info(self.firmware_version):

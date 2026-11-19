@@ -320,10 +320,11 @@ written at production. Finger serial numbers are sequential, so the two digits
 after the dash of the label no longer give the hardware revision: read it here.
 
 - `not programmed`: production hasn't written this device's hardware revision
-  (units made before June 2026). A hub keeps the data written when it got its
-  serial number, so an older hub can show it next to newer fingers.
-- `not available` on a finger: the hub got no valid row for it (finger not
+  (likely a unit made before June 2026). A hub keeps the data written when it
+  got its serial number, so a hub can show it next to fingers that have one.
+- `not available`: the hub got no valid row for this device (finger not
   plugged in, or EEPROM unreadable).
+- `year ?`: production hasn't written the production year.
 - `Hardware revision and serial numbers: not available before firmware 2.1.0`:
   the hub runs an older firmware, which doesn't report them.
 - `Hardware revision and serial numbers: no valid reply from the hub`: the hub
