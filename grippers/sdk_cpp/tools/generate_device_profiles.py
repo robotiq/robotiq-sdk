@@ -15,6 +15,7 @@ is out of date.
 
 import argparse
 import json
+import math
 import re
 import sys
 from pathlib import Path
@@ -32,11 +33,13 @@ NUMBER_FIELDS = (
 REGISTER_FIELDS = ("open_position", "closed_position")
 IDENTIFIER_FIELDS = {
     "name": re.compile(r"[a-z0-9_]+"),
-    "constant": re.compile(r"[A-Za-z_][A-Za-z0-9_]*"),
+    "constant": re.compile(r"k[A-Z0-9][A-Za-z0-9_]*"),
 }
+PROFILE_FIELDS = (*IDENTIFIER_FIELDS, *NUMBER_FIELDS, *REGISTER_FIELDS, "doc")
+FILE_KEYS = ("schema_version", "profiles")
 REGISTER_MAX = 255
-REGISTER_TEXT = re.compile(r"0|[1-9][0-9]*")
-LINE_BREAK = re.compile(r"[\n\r]")
+REGISTER_TEXT = re.compile(r"[0-9]+")
+LINE_BREAK_OR_TAB = re.compile(r"[\n\r\t]")
 COLUMN_LIMIT = 120
 
 
@@ -62,12 +65,16 @@ def main():
     args = parser.parse_args()
 
     try:
-        block = render(load_profiles(args.json_path))
-        current = args.header_path.read_bytes().decode("utf-8")
-        updated = replace_block(current, block, args.header_path)
-    except ProfileError as error:
+        return generate(args)
+    except (ProfileError, OSError) as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+
+
+def generate(args):
+    block = render(load_profiles(args.json_path))
+    current = read_utf8(args.header_path)
+    updated = replace_block(current, block, args.header_path)
 
     if updated == current.replace("\r\n", "\n"):
         return 0
@@ -84,18 +91,29 @@ def main():
     return 0
 
 
+def read_utf8(path):
+    try:
+        return path.read_bytes().decode("utf-8")
+    except UnicodeDecodeError as error:
+        raise ProfileError(f"{path}: is not UTF-8 text ({error})") from error
+
+
 def load_profiles(path):
     try:
         data = json.loads(
-            path.read_text(encoding="utf-8"),
+            read_utf8(path),
             parse_int=IntegerText,
             parse_float=RealText,
+            object_pairs_hook=lambda pairs: without_repeated_keys(pairs, path),
         )
     except json.JSONDecodeError as error:
         raise ProfileError(f"{path}: {error}") from error
     if not isinstance(data, dict):
         raise ProfileError(f"{path}: must be a JSON object")
     check_schema_version(data.get("schema_version"), path)
+    for key in data:
+        if key not in FILE_KEYS:
+            raise ProfileError(f"{path}: has unknown key {key}")
 
     profiles = data.get("profiles")
     if not isinstance(profiles, list) or not profiles:
@@ -106,6 +124,15 @@ def load_profiles(path):
     for field in IDENTIFIER_FIELDS:
         check_unique(profiles, field, path)
     return profiles
+
+
+def without_repeated_keys(pairs, path):
+    members = {}
+    for key, value in pairs:
+        if key in members:
+            raise ProfileError(f"{path}: {key} appears more than once in an object")
+        members[key] = value
+    return members
 
 
 def check_schema_version(version, path):
@@ -133,17 +160,20 @@ def check_unique(profiles, field, path):
 def check_profile(profile, where):
     if not isinstance(profile, dict):
         raise ProfileError(f"{where}: must be an object")
-    for field in (*IDENTIFIER_FIELDS, *NUMBER_FIELDS, *REGISTER_FIELDS, "doc"):
+    for field in PROFILE_FIELDS:
         if field not in profile:
             raise ProfileError(f"{where}: has no {field}")
+    for field in profile:
+        if field not in PROFILE_FIELDS:
+            raise ProfileError(f"{where}: has unknown field {field}")
     for field, pattern in IDENTIFIER_FIELDS.items():
         check_identifier(profile[field], pattern, f"{where}: {field}")
     for field in NUMBER_FIELDS:
         check_number(profile[field], f"{where}: {field}")
     for field in REGISTER_FIELDS:
         check_register(profile[field], f"{where}: {field}")
-    check_order(profile, ("min_speed", "max_speed"), where, strict=False)
-    check_order(profile, ("min_opening", "max_opening"), where, strict=True)
+    check_order(profile, ("min_speed", "max_speed"), where)
+    check_order(profile, ("min_opening", "max_opening"), where)
     check_band(profile["open_position"], profile["closed_position"], where)
     check_doc(profile["doc"], f"{where}: doc")
 
@@ -158,18 +188,18 @@ def check_identifier(value, pattern, where):
 def check_number(value, where):
     if not isinstance(value, (IntegerText, RealText)):
         raise ProfileError(f"{where} must be a number, got {describe(value)}")
+    if not math.isfinite(float(value)):
+        raise ProfileError(f"{where} must be finite, got {value}")
     if float(value) < 0.0:
         raise ProfileError(f"{where} must be 0 or more, got {value}")
 
 
-def check_order(profile, fields, where, strict):
+def check_order(profile, fields, where):
     low_field, high_field = fields
-    low, high = float(profile[low_field]), float(profile[high_field])
-    if low < high or (low == high and not strict):
+    if float(profile[low_field]) < float(profile[high_field]):
         return
-    relation = "below" if strict else "at most"
     raise ProfileError(
-        f"{where}: {low_field} ({profile[low_field]}) must be {relation} "
+        f"{where}: {low_field} ({profile[low_field]}) must be below "
         f"{high_field} ({profile[high_field]})"
     )
 
@@ -178,8 +208,8 @@ def check_register(value, where):
     is_register = isinstance(value, IntegerText) and REGISTER_TEXT.fullmatch(value)
     if not is_register or int(value) > REGISTER_MAX:
         raise ProfileError(
-            f"{where} must be a register value from 0 to {REGISTER_MAX} "
-            f"without leading zeros, got {describe(value)}"
+            f"{where} must be a register value from 0 to {REGISTER_MAX}, "
+            f"got {describe(value)}"
         )
 
 
@@ -195,11 +225,19 @@ def check_doc(doc, where):
     if not isinstance(doc, list) or not doc or not doc[0]:
         raise ProfileError(f"{where} must be a list of lines starting with the brief")
     for line in doc:
-        if type(line) is not str or line.endswith("\\") or LINE_BREAK.search(line):
+        if type(line) is not str or not is_one_clean_line(line):
             raise ProfileError(
-                f"{where} lines must be strings without line breaks "
-                "and not ending with a backslash"
+                f"{where} lines must be strings without line breaks or tabs, "
+                "not ending with a space or a backslash"
             )
+
+
+def is_one_clean_line(line):
+    return (
+        line == line.rstrip()
+        and not line.endswith("\\")
+        and not LINE_BREAK_OR_TAB.search(line)
+    )
 
 
 def describe(value):
@@ -220,7 +258,7 @@ def render(profiles):
         entry = f'   {{"{profile["name"]}", {profile["constant"]}}},'
         lines += checked_width([entry], profile["name"])
     lines += ["}};", END_MARKER]
-    return "\n".join(lines) + "\n"
+    return lines
 
 
 def render_profile(profile):
@@ -261,14 +299,15 @@ def knuckle_slope(profile):
 
 
 def replace_block(header, block, path):
-    text = header.replace("\r\n", "\n")
-    begin = text.find(BEGIN_MARKER + "\n")
-    end = text.find(END_MARKER + "\n", begin)
-    if begin < 0 or end < 0:
+    lines = header.replace("\r\n", "\n").split("\n")
+    markers_once = lines.count(BEGIN_MARKER) == 1 and lines.count(END_MARKER) == 1
+    if not markers_once or lines.index(END_MARKER) < lines.index(BEGIN_MARKER):
         raise ProfileError(
-            f"{path}: needs the lines '{BEGIN_MARKER}' and '{END_MARKER}'"
+            f"{path}: needs exactly one line '{BEGIN_MARKER}' "
+            f"and, after it, exactly one line '{END_MARKER}'"
         )
-    return text[:begin] + block + text[end + len(END_MARKER) + 1 :]
+    begin, end = lines.index(BEGIN_MARKER), lines.index(END_MARKER)
+    return "\n".join(lines[:begin] + block + lines[end + 1 :])
 
 
 if __name__ == "__main__":
