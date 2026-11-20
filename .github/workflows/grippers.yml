@@ -167,7 +167,8 @@ jobs:
 
   # The CMake wiring of the freestanding profile, with the host compiler: the
   # configure must not require Threads, and must leave out the OS serial TU
-  # along with the rest of the hosted ones.
+  # along with the rest of the hosted ones. The unit tests need DefaultSerial,
+  # so ctest here runs only the device profiles checks.
   freestanding-cmake:
     runs-on: ubuntu-latest
     steps:
@@ -177,6 +178,28 @@ jobs:
           cmake -S sdk_cpp -B build-freestanding -DCMAKE_BUILD_TYPE=Release \
             -DGRIPPERS_HOSTED=OFF -DGRIPPERS_BUILD_DEFAULT_SERIAL=OFF -DGRIPPERS_BUILD_FAKE=OFF
           cmake --build build-freestanding -j 4
+          ctest --test-dir build-freestanding --output-on-failure
+
+      # find_package(grippers) stops when the installed data file is missing,
+      # so an install that loses it must fail here, not at a consumer.
+      - name: Install, then find the package and its data file from a consumer
+        run: |
+          cmake --install build-freestanding --prefix "$PWD/install"
+          cmake -S sdk_cpp/tests/install_consumer -B build-consumer -DCMAKE_PREFIX_PATH="$PWD/install"
+
+  # Runs the generator with the runner's Python directly: CMake leaves the
+  # same checks out of ctest when it finds no Python, and that must not pass
+  # silently here.
+  device-profiles:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check the committed header against the data file
+        run: >
+          python3 sdk_cpp/tools/generate_device_profiles.py --check
+          sdk_cpp/data/device_profiles.json sdk_cpp/include/Robotiq/gripper/device_profile.hpp
+      - name: Test the generator
+        run: python3 sdk_cpp/tools/test_generate_device_profiles.py
 
   format:
     runs-on: ubuntu-latest
@@ -250,6 +273,7 @@ jobs:
   #   cortex-m55          bare-metal cross-compile of the freestanding profile
   #   threadx-link        links the threaded stack against real ThreadX
   #   freestanding-cmake  freestanding CMake wiring with the host compiler
+  #   device-profiles     generated header checked against its data file
   #   format              clang-format check
   #   coverage            gcovr report
   #   api-docs            Doxygen build (WARN_AS_ERROR)
@@ -261,7 +285,7 @@ jobs:
     defaults:
       run:
         working-directory: .
-    needs: [build-and-test, cortex-m55, threadx-link, freestanding-cmake, format, coverage, api-docs, doc-snippets]
+    needs: [build-and-test, cortex-m55, threadx-link, freestanding-cmake, device-profiles, format, coverage, api-docs, doc-snippets]
     runs-on: ubuntu-latest
     steps:
       - name: Every job succeeded

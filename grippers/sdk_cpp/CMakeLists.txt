@@ -178,8 +178,8 @@ if(GRIPPERS_TOP_LEVEL OR GRIPPERS_BUILD_TESTS)
 endif()
 
 # --- examples -----------------------------------------------------------
-# Examples and tests exercise the DefaultSerial (and through it the hosted
-# runtime), so they only exist when it is built.
+# Examples and unit tests exercise the DefaultSerial (and through it the
+# hosted runtime), so they only exist when it is built.
 if(GRIPPERS_BUILD_EXAMPLES)
   if(GRIPPERS_BUILD_DEFAULT_SERIAL)
     add_subdirectory(examples)
@@ -195,12 +195,15 @@ if(GRIPPERS_BUILD_TESTS)
     if(GRIPPERS_BUILD_DEFAULT_SERIAL)
       add_subdirectory(tests)
     else()
-      message(STATUS "grippers: tests need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them")
+      message(STATUS "grippers: unit tests need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them")
     endif()
     if(Python3_Interpreter_FOUND)
       add_test(NAME device_profiles_header_is_current
         COMMAND ${Python3_EXECUTABLE} ${GRIPPERS_DEVICE_PROFILES_GENERATOR} --check
           ${GRIPPERS_DEVICE_PROFILES_JSON} ${GRIPPERS_DEVICE_PROFILES_HEADER}
+      )
+      add_test(NAME device_profiles_generator_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_device_profiles.py
       )
     endif()
   endif()
@@ -226,8 +229,9 @@ install(EXPORT grippers_targets
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/grippers
 )
 
-set(GRIPPERS_DEVICE_PROFILES_INSTALL_PATH ${CMAKE_INSTALL_DATADIR}/grippers/device_profiles.json)
-install(FILES ${GRIPPERS_DEVICE_PROFILES_JSON} DESTINATION ${CMAKE_INSTALL_DATADIR}/grippers)
+set(GRIPPERS_DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/grippers)
+set(GRIPPERS_DEVICE_PROFILES_INSTALL_PATH ${GRIPPERS_DATA_INSTALL_DIR}/device_profiles.json)
+install(FILES ${GRIPPERS_DEVICE_PROFILES_JSON} DESTINATION ${GRIPPERS_DATA_INSTALL_DIR})
 
 include(CMakePackageConfigHelpers)
 configure_package_config_file(
