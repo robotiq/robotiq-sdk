@@ -146,14 +146,18 @@ REJECTED = (
 )
 
 
+def with_unix_line_endings(path):
+    return path.read_bytes().replace(b"\r\n", b"\n")
+
+
 class GeneratorTest(unittest.TestCase):
     def setUp(self):
         self.directory = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.directory)
         self.json_path = self.directory / "device_profiles.json"
         self.header_path = self.directory / "device_profile.hpp"
-        shutil.copyfile(SHIPPED_JSON, self.json_path)
-        shutil.copyfile(SHIPPED_HEADER, self.header_path)
+        self.json_path.write_bytes(with_unix_line_endings(SHIPPED_JSON))
+        self.header_path.write_bytes(with_unix_line_endings(SHIPPED_HEADER))
 
     def generate(self, *flags):
         command = [
@@ -259,7 +263,7 @@ class GeneratorTest(unittest.TestCase):
         self.assert_rejected(self.generate("--check"), "needs exactly one line")
 
     def test_bad_data_is_refused_with_the_profile_and_field_named(self):
-        shipped = SHIPPED_JSON.read_bytes()
+        shipped = with_unix_line_endings(SHIPPED_JSON)
         for case, old, new, reason in REJECTED:
             with self.subTest(case):
                 self.json_path.write_bytes(shipped)
