@@ -279,9 +279,14 @@ the first time they run.
 
 ```
 ================================================================================
-                        Robotiq Tactile Sensor Monitor
+             Robotiq Tactile Sensor Monitor, firmware version 2.2.0
 ================================================================================
 Data Rate: 160.234 KB/s  |  Refresh Rate: 1000.1 Hz  |  Total Packets: 15234
+================================================================================
+Hub      Hub     hardware revision not programmed  serial TH100032     year 2026
+Finger 0 TSF-85  hardware revision 2.3.1           serial TSF85-23130  year 2026
+Finger 1 TSF-85  hardware revision 2.3.1           serial TSF85-23053  year 2026
+================================================================================
 
 FINGER 0
 --------------------------------------------------------------------------------
@@ -309,6 +314,22 @@ FINGER 1
 ================================================================================
 Press Ctrl+C to exit
 ```
+
+The rows under the rates come from the EEPROM of the hub and of each finger,
+written at production. Finger serial numbers are sequential, so the two digits
+after the dash of the label no longer give the hardware revision: read it here.
+
+- `not programmed`: production hasn't written this device's hardware revision
+  (likely a unit made before June 2026). A hub keeps the data written when it
+  got its serial number, so a hub can show it next to fingers that have one.
+- `not available`: the hub got no valid row for this device (finger not
+  plugged in, or EEPROM unreadable).
+- `year ?`: production hasn't written the production year.
+- `Hardware revision and serial numbers: not available before firmware 2.1.0`:
+  the hub runs an older firmware, which doesn't report them.
+- `Hardware revision and serial numbers: no valid reply from the hub`: the hub
+  runs 2.1.0 or later (or its version couldn't be read) but didn't answer
+  within 1 s. Relaunch quick_connect.
 
 ---
 
@@ -365,6 +386,7 @@ sensor_quickstart/
 ├── quick_connect.py         # Terminal-based sensor monitor
 ├── web_viewer.py            # Web-based visualization server
 ├── protocol.py              # USB protocol implementation
+├── device_info.py           # Hardware revision and serial numbers (0xE4)
 ├── ft_source.py             # Force/torque source interface
 ├── ft_modbus.py             # Force/torque reader (Modbus RTU)
 ├── gripper_control.py       # Gripper control (pyrobotiqgripper)
@@ -383,6 +405,7 @@ sensor_quickstart/
 │   ├── tip_mirror_check.py  #   fingertip angle: the two fingers agree
 │   ├── tip_limit_check.py   #   fingertip angle: stays inside joint travel
 │   └── build_gripper_geometry.py
+├── tests/                   # pytest, on simulated replies
 ├── web/                     # Web UI assets
 │   ├── index.html
 │   ├── app.js               #   tabs, charts, websocket

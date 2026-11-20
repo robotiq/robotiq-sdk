@@ -153,6 +153,9 @@
 //! side of closedPosition, so a reading there converts to an opening a
 //! touch off minOpening; values past the band read as the nearest end.
 //!
+//! The knuckle angle maps linearly over the whole byte instead, extrapolating
+//! past the band, so every count round-trips through it.
+//!
 //! A profile the arithmetic cannot use (a non-positive position span or
 //! register band, or maxSpeed at or below minSpeed) yields nothing.
 //!

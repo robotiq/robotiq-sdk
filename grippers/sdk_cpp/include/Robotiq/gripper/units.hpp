@@ -35,6 +35,17 @@ inline constexpr double kAmperesPerRegisterStep = 0.010;
 [[nodiscard]] std::optional<uint8_t> registerFromSpan(double value, double minimum, double maximum);
 
 //! \ingroup units
+//! Register value 0..255 -> the value in [minimum, maximum] that
+//! registerFromSpan maps back to it.
+//! \param value The register value.
+//! \param minimum The value at register 0.
+//! \param maximum The value at register 255.
+//! \return The value, or std::nullopt if \p minimum is negative,
+//!         \p minimum or \p maximum is non-finite, or \p maximum is at
+//!         or below \p minimum.
+[[nodiscard]] std::optional<double> valueInSpanFromRegister(uint8_t value, double minimum, double maximum);
+
+//! \ingroup units
 //! Speed in m/s -> rSP.
 //! \param speed Requested speed, in m/s. A value below profile.minSpeed
 //!        floors at register 0; a value above profile.maxSpeed
@@ -94,13 +105,20 @@ inline constexpr double kAmperesPerRegisterStep = 0.010;
 [[nodiscard]] std::optional<double> openingFromRegister(uint8_t value, const DeviceProfile& profile);
 
 //! \ingroup units
-//! Knuckle angle in rad, 0 at open -> rPR, clamped to the register band.
-//! \return std::nullopt for a non-finite angle or a profile with no knuckle.
+//! Knuckle angle in rad -> rPR. Unlike the opening, linear over the whole byte:
+//! angles past the register band extrapolate, saturating at 0 and 255.
+//! \param angle Knuckle rotation from openPosition, in radians.
+//! \param profile The device profile
+//! \return rPR, or std::nullopt for a non-finite \p angle or a profile
+//!         without DeviceProfile::hasKnuckle().
 [[nodiscard]] std::optional<uint8_t> knuckleAngleToRegister(double angle, const DeviceProfile& profile);
 
 //! \ingroup units
-//! gPO -> knuckle angle in rad, 0 at open.
-//! \return std::nullopt for a profile with no knuckle.
+//! gPO -> knuckle angle in rad from openPosition.
+//! \param value The raw register value (gPO).
+//! \param profile The device profile
+//! \return The angle in radians, or std::nullopt for a profile without
+//!         DeviceProfile::hasKnuckle().
 [[nodiscard]] std::optional<double> knuckleAngleFromRegister(uint8_t value, const DeviceProfile& profile);
 
 //! \ingroup units
