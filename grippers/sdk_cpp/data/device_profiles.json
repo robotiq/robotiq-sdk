@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "profiles": [
+    {
+      "name": "2f_85",
+      "constant": "k2F85",
+      "min_speed": 0.020,
+      "max_speed": 0.150,
+      "min_opening": 0.0,
+      "max_opening": 0.085,
+      "open_position": 3,
+      "closed_position": 230,
+      "knuckle_closed_angle": 0.7929,
+      "doc": [
+        "The measured profile for the 2F-85",
+        "",
+        "\\warning Assumes that the gripper is in parallel-finger mode."
+      ]
+    },
+    {
+      "name": "2f_140",
+      "constant": "k2F140",
+      "min_speed": 0.030,
+      "max_speed": 0.250,
+      "min_opening": 0.0,
+      "max_opening": 0.140,
+      "open_position": 3,
+      "closed_position": 230,
+      "knuckle_closed_angle": 0.77,
+      "doc": [
+        "The measured profile for the 2F-140",
+        "",
+        "\\warning Assumes that the gripper is in parallel-finger mode."
+      ]
+    },
+    {
+      "name": "hand_e",
+      "constant": "kHandE",
+      "min_speed": 0.020,
+      "max_speed": 0.150,
+      "min_opening": 0.0,
+      "max_opening": 0.050,
+      "open_position": 3,
+      "closed_position": 250,
+      "knuckle_closed_angle": 0.0,
+      "doc": [
+        "The measured profile for the Hand-E"
+      ]
+    },
+    {
+      "name": "hand_e_100",
+      "constant": "kHandE100",
+      "min_speed": 0.020,
+      "max_speed": 0.150,
+      "min_opening": 0.0,
+      "max_opening": 0.100,
+      "open_position": 3,
+      "closed_position": 250,
+      "knuckle_closed_angle": 0.0,
+      "doc": [
+        "The measured profile for the Hand-E 100 (100 mm stroke)",
+        "",
+        "Same speed range as the Hand-E (product sheet: 20 to 150 mm/s) over twice",
+        "the stroke. Register endpoints measured on a Hand-E 100: 3 and 250, the",
+        "Hand-E's band, so one count is about 0.4 mm of opening."
+      ]
+    },
+    {
+      "name": "hand_e_c10",
+      "constant": "kHandEC10",
+      "min_speed": 0.014,
+      "max_speed": 0.107,
+      "min_opening": 0.0,
+      "max_opening": 0.040,
+      "open_position": 3,
+      "closed_position": 250,
+      "knuckle_closed_angle": 0.0,
+      "doc": [
+        "The measured profile for the Hand-E C10",
+        "",
+        "Opening is the diameter between the three fingertips."
+      ]
+    }
+  ]
+}

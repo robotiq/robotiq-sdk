@@ -7,11 +7,12 @@ set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 git fetch --quiet --tags origin
 
-# Public API of each SDK. grippers: the headers minus detail/. tsf: the C++ SDK
-# headers, plus the files of the user-facing tools (launchers, quick_connect.py,
+# Public API of each SDK. grippers: the headers minus detail/, plus the installed
+# data files. tsf: the C++ SDK headers, plus the files of the user-facing tools (launchers, quick_connect.py,
 # the web viewer, the firmware tool), whose behaviour is read from the PRs.
 G_HEADERS=grippers/sdk_cpp/include
 G_EXCLUDE=':!grippers/sdk_cpp/include/Robotiq/detail'
+G_DATA=grippers/sdk_cpp/data
 T_HEADERS=tsf/sdk_cpp/*.h
 T_TOOLS=(tsf/sensor_quickstart tsf/firmware ':!tsf/sensor_quickstart/web/vendor')
 last=$(git describe --tags --abbrev=0 --match 'v[0-9]*' origin/main)
@@ -51,8 +52,8 @@ for m in $(git log --first-parent --format=%H "$last..origin/main"); do
 done
 
 for sdk in grippers tsf; do
-  if [ $sdk = grippers ]; then paths=("$G_HEADERS" "$G_EXCLUDE"); else paths=("$T_HEADERS"); fi
-  echo; echo "== $sdk: public header changes since $last =="
+  if [ $sdk = grippers ]; then paths=("$G_HEADERS" "$G_EXCLUDE" "$G_DATA"); else paths=("$T_HEADERS"); fi
+  echo; echo "== $sdk: public header and data file changes since $last =="
   git diff --stat "$last" origin/main -- "${paths[@]}"
   echo; echo "-- removed or changed lines (check whether any breaks a setup that worked on $last) --"
   git diff -U0 "$last" origin/main -- "${paths[@]}" | grep '^-' | grep -v '^--- ' || echo "(none: additions only)"
@@ -63,8 +64,8 @@ echo; echo "-- grippers detail/ changes (not public API, for information) --"
 git diff --stat "$last" origin/main -- "$G_HEADERS/Robotiq/detail" | tail -1 || true
 
 if [ "${1:-}" = "--full-diff" ]; then
-  echo; echo "== Full public header diff =="
-  git diff "$last" origin/main -- "$G_HEADERS" "$G_EXCLUDE" "$T_HEADERS"
+  echo; echo "== Full public header and data file diff =="
+  git diff "$last" origin/main -- "$G_HEADERS" "$G_EXCLUDE" "$G_DATA" "$T_HEADERS"
 fi
 
 echo; echo "== Build/CI inputs changed since $last (no header lines, but can break users) =="

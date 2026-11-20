@@ -162,6 +162,14 @@ Some gripper profiles are provided for convenience: `profiles::k2F85`,
 your own profile if for example you are using custom fingers and the close and
 open position are different from the default profiles.
 
+Each shipped profile also has a stable name: `2f_85`, `2f_140`, `hand_e`,
+`hand_e_100` and `hand_e_c10`, the names robotiq-ros's `gripper_profile`
+takes. `profiles::profileNamed("hand_e_c10")` returns that profile, or
+`std::nullopt` for an unknown name, and `profiles::kNamed` lists them all.
+
+The same values install with the SDK as a JSON file, for programs in other
+languages: see [sdk_cpp/data/README.md](../sdk_cpp/data/README.md).
+
 Force is commanded as an effort between 0 (minimum) and 1 (maximum) rather
 than newtons.
 

@@ -58,7 +58,7 @@ Nothing since the tag → stop.
 Principle: **a release is major only when a setup that worked on the previous release stops building, linking or behaving as documented**, in any SDK. The diffs are inputs, not the verdict.
 
 Inputs to go through, for each SDK:
-- **grippers:** the public header diff (`preflight.sh --full-diff`; the documented API is `grippers/README.md` plus `Robotiq/gripper/` and `gripper.hpp`, `detail/` is not public).
+- **grippers:** the public header and data file diff (`preflight.sh --full-diff`; the documented API is `grippers/README.md` plus `Robotiq/gripper/`, `gripper.hpp` and the installed `sdk_cpp/data/device_profiles.json`, `detail/` is not public). In the data file, a renamed or removed `name` or field, a changed unit, or a `schema_version` change breaks its readers.
 - **tsf:** the C++ SDK headers (`tsf/sdk_cpp/*.h`), and the behaviour of the user-facing tools: the launchers, `quick_connect.py` and the web viewer options, the firmware flashing tool. preflight.sh lists the files of these tools that changed; what counts as documented is in the tsf READMEs.
 - Every merged PR from step 1, and the build/CI inputs preflight lists (`VERSION`, `cmake/`, each `sdk_cpp/CMakeLists.txt`, `.github/`).
 

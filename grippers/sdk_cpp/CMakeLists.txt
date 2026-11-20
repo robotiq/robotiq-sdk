@@ -166,9 +166,20 @@ add_subdirectory(third_party/nanomodbus)
 set_source_files_properties(third_party/nanomodbus/nanomodbus.c
   PROPERTIES COMPILE_OPTIONS "$<IF:$<C_COMPILER_ID:MSVC>,/W0,-w>")
 
+# --- device profiles ----------------------------------------------------
+set(GRIPPERS_DEVICE_PROFILES_JSON ${CMAKE_CURRENT_SOURCE_DIR}/data/device_profiles.json)
+set(GRIPPERS_DEVICE_PROFILES_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/Robotiq/gripper/device_profile.hpp)
+set(GRIPPERS_DEVICE_PROFILES_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_device_profiles.py)
+if(GRIPPERS_TOP_LEVEL OR GRIPPERS_BUILD_TESTS)
+  find_package(Python3 COMPONENTS Interpreter)
+  if(NOT Python3_Interpreter_FOUND)
+    message(STATUS "grippers: no Python 3 interpreter, skipping the device profiles generator and its check")
+  endif()
+endif()
+
 # --- examples -----------------------------------------------------------
-# Examples and tests exercise the DefaultSerial (and through it the hosted
-# runtime), so they only exist when it is built.
+# Examples and unit tests exercise the DefaultSerial (and through it the
+# hosted runtime), so they only exist when it is built.
 if(GRIPPERS_BUILD_EXAMPLES)
   if(GRIPPERS_BUILD_DEFAULT_SERIAL)
     add_subdirectory(examples)
@@ -179,13 +190,22 @@ endif()
 
 # --- tests --------------------------------------------------------------
 if(GRIPPERS_BUILD_TESTS)
-  if(GRIPPERS_BUILD_DEFAULT_SERIAL)
-    include(CTest)
-    if(BUILD_TESTING)
+  include(CTest)
+  if(BUILD_TESTING)
+    if(GRIPPERS_BUILD_DEFAULT_SERIAL)
       add_subdirectory(tests)
+    else()
+      message(STATUS "grippers: unit tests need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them")
     endif()
-  else()
-    message(STATUS "grippers: tests need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them")
+    if(Python3_Interpreter_FOUND)
+      add_test(NAME device_profiles_header_is_current
+        COMMAND ${Python3_EXECUTABLE} ${GRIPPERS_DEVICE_PROFILES_GENERATOR} --check
+          ${GRIPPERS_DEVICE_PROFILES_JSON} ${GRIPPERS_DEVICE_PROFILES_HEADER}
+      )
+      add_test(NAME device_profiles_generator_tests
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_device_profiles.py
+      )
+    endif()
   endif()
 endif()
 
@@ -209,11 +229,16 @@ install(EXPORT grippers_targets
   DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/grippers
 )
 
+set(GRIPPERS_DATA_INSTALL_DIR ${CMAKE_INSTALL_DATADIR}/grippers)
+set(GRIPPERS_DEVICE_PROFILES_INSTALL_PATH ${GRIPPERS_DATA_INSTALL_DIR}/device_profiles.json)
+install(FILES ${GRIPPERS_DEVICE_PROFILES_JSON} DESTINATION ${GRIPPERS_DATA_INSTALL_DIR})
+
 include(CMakePackageConfigHelpers)
 configure_package_config_file(
   cmake/grippers-config.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/grippers-config.cmake
   INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/grippers
+  PATH_VARS GRIPPERS_DEVICE_PROFILES_INSTALL_PATH
 )
 write_basic_package_version_file(
   ${CMAKE_CURRENT_BINARY_DIR}/grippers-config-version.cmake
@@ -238,6 +263,14 @@ if(GRIPPERS_TOP_LEVEL)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/*.cpp
   )
+  if(Python3_Interpreter_FOUND)
+    add_custom_target(update_device_profiles
+      COMMAND ${Python3_EXECUTABLE} ${GRIPPERS_DEVICE_PROFILES_GENERATOR}
+        ${GRIPPERS_DEVICE_PROFILES_JSON} ${GRIPPERS_DEVICE_PROFILES_HEADER}
+      COMMENT "Generating device_profile.hpp from data/device_profiles.json"
+    )
+  endif()
+
   add_custom_target(format
     COMMAND clang-format -i ${GRIPPERS_FORMAT_SOURCES}
     COMMENT "Formatting sources with clang-format"

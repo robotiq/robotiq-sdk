@@ -162,3 +162,42 @@ On a gap, it lists every offending symbol and exits non-zero:
 
 This is what the `api-docs` CI job runs right after `doxygen Doxyfile`
 (`.github/workflows/grippers.yml`).
+
+## generate_device_profiles.py
+
+Writes the device profiles block of `include/Robotiq/gripper/device_profile.hpp`
+from `data/device_profiles.json`: the `profiles::k...` constants and
+`profiles::kNamed`, between the `BEGIN generated` and `END generated` lines.
+The rest of the header is written by hand. Numbers are copied with the exact
+text they have in the JSON, so `0.020` stays `0.020` in C++. It needs Python 3
+and nothing else.
+
+It checks the data first and stops with an `error:` line naming the profile
+and field at fault; the `check_...` functions of the script are the list of
+rules. One rule is not obvious: no generated line may be longer than 120
+columns, and no `doc` line may end with a space or hold a tab. clang-format
+(`ColumnLimit` in `grippers/.clang-format`) would rewrite such lines, and
+the format job and the drift check would then disagree about the block.
+
+After editing the JSON, from `grippers/`, with the build directory of
+[the documented configure](../../docs/01-environment-setup.md) (`build`):
+
+```sh
+cmake --build build --target update_device_profiles
+```
+
+The target exists only when `sdk_cpp` is the top-level project and CMake
+found Python 3. Without a build directory, from `sdk_cpp/`:
+
+```sh
+python3 tools/generate_device_profiles.py data/device_profiles.json include/Robotiq/gripper/device_profile.hpp
+```
+
+Commit the JSON and the header together.
+
+`--check` writes nothing and exits non-zero when the header is out of date;
+the `device_profiles_header_is_current` test runs it that way.
+`test_generate_device_profiles.py` tests the script itself on temporary
+copies of the two files (`python3 tools/test_generate_device_profiles.py`,
+or the `device_profiles_generator_tests` test). CI runs both in its
+`device-profiles` job, without CMake.

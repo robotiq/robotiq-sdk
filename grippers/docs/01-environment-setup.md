@@ -223,8 +223,8 @@ the way [Quick start](02-quick-start.md) describes.
 
 It activates the gripper and then opens and closes the fingers, so keep
 the jaws clear before starting it. It assumes a 2F-85; for another
-gripper add the baudrate and its model, e.g. `/dev/ttyUSB0 115200 2f140`
-(`2f85`, `2f140`, `hande`, `hande_100` or `hande_c10`). The other
+gripper add the baudrate and its model, e.g. `/dev/ttyUSB0 115200 2f_140`;
+run it without arguments to list the model names. The other
 examples are described in
 [examples/README.md](../sdk_cpp/examples/README.md).
 
@@ -352,14 +352,15 @@ of them back on explicitly if you want that anyway
 `GRIPPERS_HOSTED=OFF` is a `FATAL_ERROR`, not a silent downgrade, since
 neither can actually be satisfied without the hosted runtime. Similarly,
 turning `GRIPPERS_BUILD_DEFAULT_SERIAL` `OFF` on an otherwise hosted
-build doesn't error, but examples and tests need it (they exercise the
-real serial transport), so they're skipped with a `message(STATUS ...)`
-rather than built:
+build doesn't error, but examples and unit tests need it (they exercise
+the real serial transport), so they're skipped with a
+`message(STATUS ...)` rather than built; `ctest` then runs only the device
+profiles checks, which need Python 3 and no serial port:
 
 ```sh
 cmake -S sdk_cpp -B build -DGRIPPERS_BUILD_DEFAULT_SERIAL=OFF
 # -- grippers: examples need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them
-# -- grippers: tests need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them
+# -- grippers: unit tests need GRIPPERS_BUILD_DEFAULT_SERIAL; skipping them
 ```
 
 You'd flip GRIPPERS_BUILD_DEFAULT_SERIAL off, on an otherwise-hosted desktop

@@ -10,4 +10,5 @@ if(@GRIPPERS_HOSTED@)
 endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/grippers-targets.cmake")
+set_and_check(grippers_DEVICE_PROFILES "@PACKAGE_GRIPPERS_DEVICE_PROFILES_INSTALL_PATH@")
 check_required_components(grippers)
