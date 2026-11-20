@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <Robotiq/gripper/device_profile.hpp>
+#include <Robotiq/gripper/device_profile_names.hpp>
 #include <Robotiq/gripper/units.hpp>
 
 #include "test_utils.hpp"

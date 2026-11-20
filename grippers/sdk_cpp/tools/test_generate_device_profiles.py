@@ -15,7 +15,9 @@ from pathlib import Path
 TOOLS = Path(__file__).resolve().parent
 SCRIPT = TOOLS / "generate_device_profiles.py"
 SHIPPED_JSON = TOOLS.parent / "data" / "device_profiles.json"
-SHIPPED_HEADER = TOOLS.parent / "include" / "Robotiq" / "gripper" / "device_profile.hpp"
+HEADERS = TOOLS.parent / "include" / "Robotiq" / "gripper"
+SHIPPED_HEADER = HEADERS / "device_profile.hpp"
+SHIPPED_NAMES_HEADER = HEADERS / "device_profile_names.hpp"
 END_LINE = "// END generated\n"
 BRIEF = '"The measured profile for the 2F-85"'
 REJECTED = (
@@ -157,7 +159,9 @@ class GeneratorTest(unittest.TestCase):
         self.json_path = self.directory / "device_profiles.json"
         self.header_path = self.directory / "device_profile.hpp"
         self.json_path.write_bytes(with_unix_line_endings(SHIPPED_JSON))
+        self.names_path = self.directory / "device_profile_names.hpp"
         self.header_path.write_bytes(with_unix_line_endings(SHIPPED_HEADER))
+        self.names_path.write_bytes(with_unix_line_endings(SHIPPED_NAMES_HEADER))
 
     def generate(self, *flags):
         command = [
@@ -166,6 +170,7 @@ class GeneratorTest(unittest.TestCase):
             *flags,
             str(self.json_path),
             str(self.header_path),
+            str(self.names_path),
         ]
         return subprocess.run(command, capture_output=True, text=True, check=False)
 
@@ -176,6 +181,9 @@ class GeneratorTest(unittest.TestCase):
 
     def header_text(self):
         return self.header_path.read_bytes().decode("utf-8")
+
+    def names_text(self):
+        return self.names_path.read_bytes().decode("utf-8")
 
     def assert_rejected(self, result, reason):
         self.assertEqual(result.returncode, 1)
@@ -261,6 +269,97 @@ class GeneratorTest(unittest.TestCase):
         self.edit(self.header_path, END_LINE, END_LINE + begin_line)
 
         self.assert_rejected(self.generate("--check"), "needs exactly one line")
+
+    def test_the_profile_header_holds_no_name_lookup(self):
+        self.generate()
+
+        header = self.header_text()
+        for name_side in ("kNamed", "NamedProfile", "profileNamed", "<array>"):
+            self.assertNotIn(name_side, header)
+
+    def test_the_names_header_lists_each_profile_in_data_file_order(self):
+        names = self.names_text()
+
+        self.assertIn("std::array<NamedProfile, 5> kNamed{{", names)
+        self.assertLess(
+            names.index('{"2f_85", k2F85},'), names.index('{"hand_e_c10", kHandEC10},')
+        )
+
+    def test_check_fails_on_a_stale_names_header_and_writes_nothing(self):
+        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+        before = self.names_text()
+
+        result = self.generate("--check")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("device_profile_names.hpp is out of date", result.stderr)
+        self.assertNotIn("device_profile.hpp is out of date", result.stderr)
+        self.assertEqual(self.names_text(), before)
+
+    def test_writing_brings_a_stale_names_header_up_to_date(self):
+        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+
+        result = self.generate()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('{"hand_e_c12", kHandEC10},', self.names_text())
+        self.assertEqual(self.generate("--check").returncode, 0)
+
+    def test_check_names_each_stale_file(self):
+        self.edit(self.json_path, '"constant": "kHandEC10"', '"constant": "kHandEC12"')
+
+        result = self.generate("--check")
+
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("device_profile.hpp is out of date", result.stderr)
+        self.assertIn("device_profile_names.hpp is out of date", result.stderr)
+
+    def test_a_hand_edit_anywhere_in_the_names_header_is_overwritten(self):
+        shipped = self.names_text()
+        self.edit(self.names_path, "#pragma once", "#pragma once\n#include <string>")
+        self.assertEqual(self.generate("--check").returncode, 1)
+
+        self.generate()
+
+        self.assertEqual(self.names_text(), shipped)
+
+    def test_a_missing_names_header_is_written_whole(self):
+        shipped = self.names_text()
+        self.names_path.unlink()
+
+        result = self.generate()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.names_text(), shipped)
+
+    def test_check_refuses_a_missing_names_header(self):
+        self.names_path.unlink()
+
+        self.assert_rejected(self.generate("--check"), "device_profile_names.hpp")
+
+    def test_a_names_header_with_windows_line_endings_is_current_and_keeps_them(self):
+        self.names_path.write_bytes(
+            self.names_text().replace("\n", "\r\n").encode("utf-8")
+        )
+        self.assertEqual(self.generate("--check").returncode, 0)
+        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+
+        self.generate()
+
+        self.assertIn("hand_e_c12", self.names_text())
+        self.assertNotIn("\n", self.names_text().replace("\r\n", ""))
+
+    def test_a_name_too_long_for_its_table_line_is_refused(self):
+        self.edit(self.json_path, '"name": "2f_85"', '"name": "' + "x" * 130 + '"')
+
+        self.assert_rejected(self.generate("--check"), "longer than 120 columns")
+
+    def test_a_names_header_that_is_not_utf8_is_an_error_line(self):
+        self.names_path.write_bytes(b"\xff\xfe")
+
+        self.assert_rejected(
+            self.generate("--check"), "device_profile_names.hpp: is not UTF-8 text"
+        )
 
     def test_bad_data_is_refused_with_the_profile_and_field_named(self):
         shipped = with_unix_line_endings(SHIPPED_JSON)
