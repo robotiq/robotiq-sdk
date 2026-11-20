@@ -41,10 +41,11 @@ headers under `Robotiq/gripper/` describe — `Gripper`, the command/status bloc
 `ConnectionConfig`, `Serial`, `Platform`, `Logger`, the `toString()` free
 functions, `DeviceProfile`, the shipped profiles with their stable names and
 the installed `share/grippers/device_profiles.json` they are generated from
-(see [Commanding in SI units](docs/03-how-it-works.md#commanding-in-si-units)),
-the SI unit conversions, and `GripperModbusClient` for the no-thread path. The text `toString()` renders is
-for people, not parsers: its layout may change in any release. Everything
-under `Robotiq/detail/` is internal and may change in any release.
+(see [sdk_cpp/data/README.md](sdk_cpp/data/README.md)), the SI unit
+conversions, and `GripperModbusClient` for the no-thread path. The text
+`toString()` renders is for people, not parsers: its layout may change in
+any release. Everything under `Robotiq/detail/` is internal and may change
+in any release.
 
 The injectable interfaces are the exception, and only for the side that
 implements them: a minor release may add a member `Platform`, `Serial` or

@@ -46,8 +46,9 @@ The lower bound matters: `std::stoul("-1")` doesn't throw — it silently
 wraps to a huge unsigned value that the `< kMinBaudrate` check catches.
 
 The last argument names the gripper by one of the stable names the SDK
-ships (`2f_85`, `2f_140`, `hand_e`, `hand_e_100`, `hand_e_c10`, listed in
-`profiles::kNamed`). Without it the example drives `kDefaultModel`,
+ships, such as `hand_e_c10` (`profiles::kNamed` holds them all; see
+[Commanding in SI units](03-how-it-works.md#commanding-in-si-units)).
+Without it the example drives `kDefaultModel`,
 `2f_85`, chosen by name so that reordering the data file does not change
 it. `profiles::profileNamed` looks the name up, and an unknown name prints
 the usage, built from the same table, and stops:

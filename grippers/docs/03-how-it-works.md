@@ -167,29 +167,8 @@ Each shipped profile also has a stable name: `2f_85`, `2f_140`, `hand_e`,
 takes. `profiles::profileNamed("hand_e_c10")` returns that profile, or
 `std::nullopt` for an unknown name, and `profiles::kNamed` lists them all.
 
-The profiles come from one data file, `sdk_cpp/data/device_profiles.json`,
-which `device_profile.hpp` is generated from. It installs with the SDK at
-`share/grippers/device_profiles.json`; after `find_package(grippers)`,
-`grippers_DEVICE_PROFILES` holds its absolute path, so programs in other
-languages read the same values instead of copying them. Speeds
-(`min_speed`, `max_speed`) are in m/s, openings (`min_opening`,
-`max_opening`) in m, register positions (`open_position`,
-`closed_position`) in counts from 0 to 255, and `knuckle_closed_angle` in
-rad at `closed_position` (`0.0` without a knuckle).
-
-The contract for programs in other languages is each profile's `name` and
-its numeric fields. `constant` (the C++ name) and `doc` (its Doxygen
-comment) serve the generated header only. `schema_version` changes when
-that contract changes, so a reader should check it and refuse a version it
-does not know.
-
-To change a shipped profile, edit the JSON, then run
-`cmake --build build --target update_device_profiles` and commit both files.
-The target runs `sdk_cpp/tools/generate_device_profiles.py`, which rewrites
-only the block between the `BEGIN generated` and `END generated` lines of
-the header; edit the rest of the header by hand. Python 3 is needed only to
-regenerate or check the header, not to build or use the SDK. The
-`device_profiles_header_is_current` test fails while the two files disagree.
+The same values install with the SDK as a JSON file, for programs in other
+languages: see [sdk_cpp/data/README.md](../sdk_cpp/data/README.md).
 
 Force is commanded as an effort between 0 (minimum) and 1 (maximum) rather
 than newtons.
