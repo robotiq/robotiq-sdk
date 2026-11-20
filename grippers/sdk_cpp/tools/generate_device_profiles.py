@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
-"""Generate the device profiles block of device_profile.hpp from device_profiles.json.
+"""Generate the device profiles C++ headers from device_profiles.json.
 
-Only the lines between the BEGIN and END marker comments of the header are
-rewritten. Numbers keep the exact text they have in the JSON file, so the
-C++ literals read the same as the data.
+In device_profile.hpp, only the lines between the BEGIN and END marker
+comments are rewritten. device_profile_names.hpp is written whole. Numbers
+keep the exact text they have in the JSON file, so the C++ literals read
+the same as the data.
 
 Usage:
-    generate_device_profiles.py [--check] <device_profiles.json> <device_profile.hpp>
+    generate_device_profiles.py [--check] <device_profiles.json>
+        <device_profile.hpp> <device_profile_names.hpp>
 
-Without --check, the header is rewritten in place when its block changed.
-With --check, nothing is written and the exit status is 1 when the header
-is out of date.
+Without --check, each header that changed is rewritten in place. With
+--check, nothing is written and the exit status is 1 when a header is out
+of date.
 """
 
 import argparse
@@ -41,6 +43,54 @@ REGISTER_MAX = 255
 REGISTER_TEXT = re.compile(r"[0-9]+")
 LINE_BREAK_OR_TAB = re.compile(r"[\n\r\t]")
 COLUMN_LIMIT = 120
+NAMES_HEADER_TOP = """\
+// Copyright (c) 2026 Robotiq, Inc.
+//
+// Licensed under the BSD-3-Clause license; see LICENSE for details.
+
+// Generated from data/device_profiles.json by tools/generate_device_profiles.py. Do not edit.
+
+#pragma once
+
+#include <array>
+#include <optional>
+#include <string_view>
+
+#include <Robotiq/gripper/device_profile.hpp>
+
+namespace Robotiq::profiles {
+
+//! \\ingroup units
+//! \\brief A shipped profile and its stable name.
+struct NamedProfile
+{
+   std::string_view name; //!< Stable name: the profile's name in data/device_profiles.json
+   DeviceProfile profile; //!< The profile with that name
+};
+
+//! \\ingroup units
+//! \\brief Every shipped profile with its stable name, in data/device_profiles.json order.
+"""
+NAMES_HEADER_BOTTOM = """\
+}};
+
+//! \\ingroup units
+//! \\brief The shipped profile called \\p name, or std::nullopt if there is none.
+//! \\param name A stable name such as "hand_e_c10", matched exactly, case included.
+[[nodiscard]] constexpr std::optional<DeviceProfile> profileNamed(std::string_view name)
+{
+   for(const NamedProfile& entry : kNamed)
+   {
+      if(entry.name == name)
+      {
+         return entry.profile;
+      }
+   }
+   return std::nullopt;
+}
+
+} // namespace Robotiq::profiles
+"""
 
 
 class IntegerText(str):
@@ -58,10 +108,11 @@ class ProfileError(Exception):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
-        "--check", action="store_true", help="fail when the header is out of date"
+        "--check", action="store_true", help="fail when a header is out of date"
     )
     parser.add_argument("json_path", type=Path)
     parser.add_argument("header_path", type=Path)
+    parser.add_argument("names_path", type=Path)
     args = parser.parse_args()
 
     try:
@@ -72,23 +123,35 @@ def main():
 
 
 def generate(args):
-    block = render(load_profiles(args.json_path))
-    current = read_utf8(args.header_path)
-    updated = replace_block(current, block, args.header_path)
+    profiles = load_profiles(args.json_path)
+    header = read_utf8(args.header_path)
+    names_missing = not args.check and not args.names_path.exists()
+    names = "" if names_missing else read_utf8(args.names_path)
+    targets = (
+        (
+            args.header_path,
+            header,
+            replace_block(header, render(profiles), args.header_path),
+        ),
+        (args.names_path, names, render_names(profiles)),
+    )
+    stale = [
+        (path, current, updated)
+        for path, current, updated in targets
+        if updated != current.replace("\r\n", "\n")
+    ]
 
-    if updated == current.replace("\r\n", "\n"):
-        return 0
-    if args.check:
-        print(
-            f"{args.header_path} is out of date with {args.json_path}; "
-            "run: cmake --build <build> --target update_device_profiles",
-            file=sys.stderr,
-        )
-        return 1
-
-    newline = "\r\n" if "\r\n" in current else "\n"
-    args.header_path.write_bytes(updated.replace("\n", newline).encode("utf-8"))
-    return 0
+    for path, current, updated in stale:
+        if args.check:
+            print(
+                f"{path} is out of date with {args.json_path}; "
+                "run: cmake --build <build> --target update_device_profiles",
+                file=sys.stderr,
+            )
+        else:
+            newline = "\r\n" if "\r\n" in current else "\n"
+            path.write_bytes(updated.replace("\n", newline).encode("utf-8"))
+    return 1 if args.check and stale else 0
 
 
 def read_utf8(path):
@@ -248,17 +311,16 @@ def render(profiles):
     lines = [BEGIN_MARKER]
     for profile in profiles:
         lines += checked_width(render_profile(profile), profile["name"])
+    lines[-1] = END_MARKER
+    return lines
 
-    lines += [
-        "//! \\ingroup units",
-        "//! \\brief Every shipped profile with its stable name, in data/device_profiles.json order.",
-        f"inline constexpr std::array<NamedProfile, {len(profiles)}> kNamed{{{{",
-    ]
+
+def render_names(profiles):
+    lines = [f"inline constexpr std::array<NamedProfile, {len(profiles)}> kNamed{{{{"]
     for profile in profiles:
         entry = f'   {{"{profile["name"]}", {profile["constant"]}}},'
         lines += checked_width([entry], profile["name"])
-    lines += ["}};", END_MARKER]
-    return lines
+    return NAMES_HEADER_TOP + "\n".join(lines) + "\n" + NAMES_HEADER_BOTTOM
 
 
 def render_profile(profile):

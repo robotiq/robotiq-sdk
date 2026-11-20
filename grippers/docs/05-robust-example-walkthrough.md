@@ -50,7 +50,8 @@ ships, such as `hand_e_c10` (`profiles::kNamed` holds them all; see
 [Commanding in SI units](03-how-it-works.md#commanding-in-si-units)).
 Without it the example drives `kDefaultModel`,
 `2f_85`, chosen by name so that reordering the data file does not change
-it. `profiles::profileNamed` looks the name up, and an unknown name prints
+it. `profiles::profileNamed`, from
+`<Robotiq/gripper/device_profile_names.hpp>`, looks the name up, and an unknown name prints
 the usage, built from the same table, and stops:
 
 <!-- snippet: move_gripper.cpp model-selection -->

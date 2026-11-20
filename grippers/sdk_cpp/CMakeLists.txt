@@ -169,6 +169,7 @@ set_source_files_properties(third_party/nanomodbus/nanomodbus.c
 # --- device profiles ----------------------------------------------------
 set(GRIPPERS_DEVICE_PROFILES_JSON ${CMAKE_CURRENT_SOURCE_DIR}/data/device_profiles.json)
 set(GRIPPERS_DEVICE_PROFILES_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/Robotiq/gripper/device_profile.hpp)
+set(GRIPPERS_DEVICE_PROFILE_NAMES_HEADER ${CMAKE_CURRENT_SOURCE_DIR}/include/Robotiq/gripper/device_profile_names.hpp)
 set(GRIPPERS_DEVICE_PROFILES_GENERATOR ${CMAKE_CURRENT_SOURCE_DIR}/tools/generate_device_profiles.py)
 if(GRIPPERS_TOP_LEVEL OR GRIPPERS_BUILD_TESTS)
   find_package(Python3 COMPONENTS Interpreter)
@@ -201,6 +202,7 @@ if(GRIPPERS_BUILD_TESTS)
       add_test(NAME device_profiles_header_is_current
         COMMAND ${Python3_EXECUTABLE} ${GRIPPERS_DEVICE_PROFILES_GENERATOR} --check
           ${GRIPPERS_DEVICE_PROFILES_JSON} ${GRIPPERS_DEVICE_PROFILES_HEADER}
+          ${GRIPPERS_DEVICE_PROFILE_NAMES_HEADER}
       )
       add_test(NAME device_profiles_generator_tests
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/tools/test_generate_device_profiles.py
@@ -267,7 +269,8 @@ if(GRIPPERS_TOP_LEVEL)
     add_custom_target(update_device_profiles
       COMMAND ${Python3_EXECUTABLE} ${GRIPPERS_DEVICE_PROFILES_GENERATOR}
         ${GRIPPERS_DEVICE_PROFILES_JSON} ${GRIPPERS_DEVICE_PROFILES_HEADER}
-      COMMENT "Generating device_profile.hpp from data/device_profiles.json"
+        ${GRIPPERS_DEVICE_PROFILE_NAMES_HEADER}
+      COMMENT "Generating device_profile.hpp and device_profile_names.hpp from data/device_profiles.json"
     )
   endif()
 

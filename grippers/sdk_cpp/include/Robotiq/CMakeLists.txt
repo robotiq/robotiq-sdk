@@ -13,6 +13,7 @@ target_sources(grippers_objects PRIVATE
   gripper/stderr_logger.hpp
   gripper/to_string.hpp
   gripper/device_profile.hpp
+  gripper/device_profile_names.hpp
   gripper/units.hpp
   gripper/platform.hpp
   gripper/serial.hpp

@@ -166,6 +166,8 @@ Each shipped profile also has a stable name: `2f_85`, `2f_140`, `hand_e`,
 `hand_e_100` and `hand_e_c10`, the names robotiq-ros's `gripper_profile`
 takes. `profiles::profileNamed("hand_e_c10")` returns that profile, or
 `std::nullopt` for an unknown name, and `profiles::kNamed` lists them all.
+Both come from `<Robotiq/gripper/device_profile_names.hpp>`, a header of its
+own so that code which never handles names does not include it.
 
 The same values install with the SDK as a JSON file, for programs in other
 languages: see [sdk_cpp/data/README.md](../sdk_cpp/data/README.md).

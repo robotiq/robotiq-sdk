@@ -194,10 +194,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Check the committed header against the data file
+      - name: Check the committed headers against the data file
         run: >
           python3 sdk_cpp/tools/generate_device_profiles.py --check
           sdk_cpp/data/device_profiles.json sdk_cpp/include/Robotiq/gripper/device_profile.hpp
+          sdk_cpp/include/Robotiq/gripper/device_profile_names.hpp
       - name: Test the generator
         run: python3 sdk_cpp/tools/test_generate_device_profiles.py
 
@@ -273,7 +274,7 @@ jobs:
   #   cortex-m55          bare-metal cross-compile of the freestanding profile
   #   threadx-link        links the threaded stack against real ThreadX
   #   freestanding-cmake  freestanding CMake wiring with the host compiler
-  #   device-profiles     generated header checked against its data file
+  #   device-profiles     generated headers checked against their data file
   #   format              clang-format check
   #   coverage            gcovr report
   #   api-docs            Doxygen build (WARN_AS_ERROR)
