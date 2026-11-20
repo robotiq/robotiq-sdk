@@ -61,7 +61,7 @@ namespace profiles {
 //! \brief A shipped profile and its stable name.
 struct NamedProfile
 {
-   std::string_view name; //!< Stable name, as robotiq-ros's gripper_profile spells it
+   std::string_view name; //!< Stable name: the profile's name in data/device_profiles.json
    DeviceProfile profile; //!< The profile with that name
 };
 

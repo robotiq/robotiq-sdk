@@ -7,6 +7,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <ostream>
 #include <tuple>
 #include <vector>
@@ -26,11 +27,13 @@ const DeviceProfile& kHandE = profiles::kHandE;
 using namespace Robotiq::units;
 } // namespace
 
-// Each shipped profile: its manual ranges, its measured band, its knuckle slope,
-// and an opening between the ends with the register it rounds to.
+// Each shipped profile: its stable name, its manual ranges, its measured band,
+// its knuckle slope, and an opening between the ends with the register it
+// rounds to.
 struct ShippedProfile
 {
    const char* name;
+   const char* stableName;
    const DeviceProfile& profile;
    double minSpeed;
    double maxSpeed;
@@ -52,11 +55,11 @@ void PrintTo(const ShippedProfile& shipped, std::ostream* out)
 const std::vector<ShippedProfile>& shippedProfiles()
 {
    static const std::vector<ShippedProfile> kShipped = {
-      {"k2F85", profiles::k2F85, 0.020, 0.150, 0.085, 3, 230, 0.7929 / 227.0, 0.0425, 117}, // 113.5 steps
-      {"k2F140", profiles::k2F140, 0.030, 0.250, 0.140, 3, 230, 0.77 / 227.0, 0.070, 117}, // 113.5 steps
-      {"kHandE", profiles::kHandE, 0.020, 0.150, 0.050, 3, 250, 0.0, 0.025, 127}, // 123.5 steps
-      {"kHandE100", profiles::kHandE100, 0.020, 0.150, 0.100, 3, 250, 0.0, 0.050, 127}, // 123.5 steps
-      {"kHandEC10", profiles::kHandEC10, 0.014, 0.107, 0.040, 3, 250, 0.0, 0.020, 127}, // 123.5 steps
+      {"k2F85", "2f_85", profiles::k2F85, 0.020, 0.150, 0.085, 3, 230, 0.7929 / 227.0, 0.0425, 117}, // 113.5 steps
+      {"k2F140", "2f_140", profiles::k2F140, 0.030, 0.250, 0.140, 3, 230, 0.77 / 227.0, 0.070, 117}, // 113.5 steps
+      {"kHandE", "hand_e", profiles::kHandE, 0.020, 0.150, 0.050, 3, 250, 0.0, 0.025, 127}, // 123.5 steps
+      {"kHandE100", "hand_e_100", profiles::kHandE100, 0.020, 0.150, 0.100, 3, 250, 0.0, 0.050, 127}, // 123.5 steps
+      {"kHandEC10", "hand_e_c10", profiles::kHandEC10, 0.014, 0.107, 0.040, 3, 250, 0.0, 0.020, 127}, // 123.5 steps
    };
    return kShipped;
 }
@@ -76,6 +79,20 @@ TEST_P(ShippedProfileTest, carries_the_manual_ranges_and_the_measured_register_b
    EXPECT_EQ(shipped.profile.closedPosition, shipped.closedPosition);
    EXPECT_DOUBLE_EQ(shipped.profile.knuckleAnglePerCount, shipped.knuckleAnglePerCount);
    EXPECT_DOUBLE_EQ(shipped.profile.registerPositionRange(), shipped.closedPosition - shipped.openPosition);
+}
+
+TEST_P(ShippedProfileTest, its_stable_name_finds_that_profile_and_no_other)
+{
+   const ShippedProfile& shipped = GetParam();
+   const std::optional<DeviceProfile> named = profiles::profileNamed(shipped.stableName);
+   ASSERT_TRUE(named.has_value());
+   EXPECT_DOUBLE_EQ(named->minSpeed, shipped.minSpeed);
+   EXPECT_DOUBLE_EQ(named->maxSpeed, shipped.maxSpeed);
+   EXPECT_DOUBLE_EQ(named->minOpening, 0.0);
+   EXPECT_DOUBLE_EQ(named->maxOpening, shipped.maxOpening);
+   EXPECT_EQ(named->openPosition, shipped.openPosition);
+   EXPECT_EQ(named->closedPosition, shipped.closedPosition);
+   EXPECT_DOUBLE_EQ(named->knuckleAnglePerCount, shipped.knuckleAnglePerCount);
 }
 
 TEST_P(ShippedProfileTest, the_speed_range_spans_the_whole_byte)
@@ -138,16 +155,7 @@ TEST(TestDeviceProfile, a_profile_written_without_a_knuckle_slope_has_no_angle)
    EXPECT_EQ(openingToRegister(0.0, custom), 226);
 }
 
-static_assert(profiles::profileNamed("hand_e")->closedPosition == 250);
-
-TEST(TestProfileNamed, every_stable_name_finds_its_constant)
-{
-   EXPECT_EQ(profiles::profileNamed("2f_85")->closedPosition, profiles::k2F85.closedPosition);
-   EXPECT_DOUBLE_EQ(profiles::profileNamed("2f_140")->maxOpening, profiles::k2F140.maxOpening);
-   EXPECT_DOUBLE_EQ(profiles::profileNamed("hand_e")->maxOpening, profiles::kHandE.maxOpening);
-   EXPECT_DOUBLE_EQ(profiles::profileNamed("hand_e_100")->maxOpening, profiles::kHandE100.maxOpening);
-   EXPECT_DOUBLE_EQ(profiles::profileNamed("hand_e_c10")->maxSpeed, profiles::kHandEC10.maxSpeed);
-}
+static_assert(profiles::profileNamed("hand_e_100")->maxOpening == 0.100);
 
 TEST(TestProfileNamed, an_unknown_or_old_spelling_finds_nothing)
 {

@@ -35,6 +35,7 @@ constexpr unsigned long kMaxBaudrate = 1000000;
 
 constexpr double kEffort = 1.0; // maximum grip effort
 constexpr const char* kDefaultModel = "2f_85";
+static_assert(Robotiq::profiles::profileNamed(kDefaultModel).has_value());
 
 // Shared by the argument checks below.
 void printUsage(const char* program)
