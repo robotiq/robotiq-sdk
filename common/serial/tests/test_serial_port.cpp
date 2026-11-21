@@ -8,6 +8,9 @@
 #include <Robotiq/common/serial_error.hpp>
 #include <Robotiq/common/serial_port.hpp>
 
+#include "comm_timeouts.hpp"
+#include "drain_wait.hpp"
+
 #include <chrono>
 #include <string>
 #include <thread>
@@ -32,6 +35,50 @@ const std::string kMissingPort = "COM255";
 const std::string kMissingPort = "/dev/this_should_not_exist";
 #endif
 
+// 115200 baud, 8N1: a byte takes ~87 us.
+constexpr std::chrono::nanoseconds kByteTime = 86806ns;
+
+TEST(DrainWait, IsTheTimeTheQueueTakesWhenThatIsShort)
+{
+   EXPECT_EQ(detail::drainWait(4, kByteTime, 50ms), 4 * kByteTime);
+}
+
+// cdc-acm reports its whole 1280-byte buffer: ~111 ms at the line rate.
+TEST(DrainWait, IsCappedForAnOverstatedQueue)
+{
+   EXPECT_EQ(detail::drainWait(1280, kByteTime, 50ms), detail::kMaxDrainPoll);
+}
+
+TEST(DrainWait, NeverRunsPastTheDeadline)
+{
+   EXPECT_EQ(detail::drainWait(1280, kByteTime, 200us), 200us);
+}
+
+TEST(DrainWait, IsCappedWithoutADeadline)
+{
+   EXPECT_EQ(detail::drainWait(1280, kByteTime, std::chrono::nanoseconds::max()), detail::kMaxDrainPoll);
+}
+
+using detail::CommTimeouts;
+using detail::commTimeouts;
+using detail::kMaxDword;
+
+TEST(CommTimeouts, AZeroReadTimeoutTakesWhatIsBufferedInEitherMode)
+{
+   EXPECT_EQ(commTimeouts(false, 0, 100), (CommTimeouts{kMaxDword, 0, 0, 100}));
+   EXPECT_EQ(commTimeouts(true, 0, 100), (CommTimeouts{kMaxDword, 0, 0, 100}));
+}
+
+TEST(CommTimeouts, AFullReadWaitsForTheCountOrTheConstant)
+{
+   EXPECT_EQ(commTimeouts(false, 500, 100), (CommTimeouts{0, 0, 500, 100}));
+}
+
+TEST(CommTimeouts, APartialReadReturnsOnAnyByteOrTheConstant)
+{
+   EXPECT_EQ(commTimeouts(true, 500, 100), (CommTimeouts{kMaxDword, kMaxDword, 500, 100}));
+}
+
 TEST(SerialPort, OpeningAMissingPortNamesIt)
 {
    SerialPort port;
@@ -48,6 +95,14 @@ TEST(SerialPort, CloseIsSafeOnAPortNeverOpened)
 }
 
 #ifndef _WIN32
+TEST(SerialPort, AnOpenFailureAfterTheOpenStillNamesThePort)
+{
+   // /dev/null opens but is no terminal, so configuring it fails.
+   SerialPort port;
+   EXPECT_THAT([&] { port.open("/dev/null", 115200); },
+               ThrowsMessage<SerialError>(HasSubstr("serial port '/dev/null': ")));
+}
+
 class PtySerialPort : public ::testing::Test
 {
 protected:
@@ -64,6 +119,13 @@ protected:
    {
       std::vector<uint8_t> data(size);
       data.resize(_port.read(data.data(), data.size(), timeout));
+      return data;
+   }
+
+   [[nodiscard]] std::vector<uint8_t> readSome(size_t size, std::chrono::milliseconds timeout)
+   {
+      std::vector<uint8_t> data(size);
+      data.resize(_port.readSome(data.data(), data.size(), timeout));
       return data;
    }
 
@@ -104,6 +166,51 @@ TEST_F(PtySerialPort, ReadRaisesWhenThePeerHangsUp)
    EXPECT_THAT([&] { (void)read(64, 500ms); }, ThrowsMessage<SerialError>(HasSubstr("serial")));
 }
 
+TEST_F(PtySerialPort, ReadSomeReturnsWhatIsBufferedWithoutWaitingForTheFullCount)
+{
+   ASSERT_TRUE(_peer.send({0xAA, 0xBB, 0xCC}));
+
+   const auto start = std::chrono::steady_clock::now();
+   EXPECT_THAT(readSome(64, 2s), ElementsAre(0xAA, 0xBB, 0xCC));
+   EXPECT_LT(std::chrono::steady_clock::now() - start, 1s);
+}
+
+TEST_F(PtySerialPort, ReadSomeWaitsForAByteThatHasNotArrivedYet)
+{
+   // Repeated so some rounds find the port empty.
+   for(int round = 0; round < 32; ++round)
+   {
+      std::thread late([this] { EXPECT_TRUE(_peer.send({0x42})); });
+      const auto data = readSome(64, 2s);
+      late.join();
+
+      ASSERT_THAT(data, ElementsAre(0x42));
+   }
+}
+
+TEST_F(PtySerialPort, ReadSomeReturnsNothingFromASilentPeer)
+{
+   EXPECT_THAT(readSome(64, 20ms), IsEmpty());
+}
+
+TEST_F(PtySerialPort, AZeroTimeoutReadSomeTakesOnlyWhatIsBuffered)
+{
+   ASSERT_TRUE(_peer.send({0xAA, 0xBB, 0xCC}));
+
+   // As for read(): this blocking byte settles the two behind it.
+   ASSERT_THAT(readSome(1, 2s), ElementsAre(0xAA));
+
+   EXPECT_THAT(readSome(64, 0ms), ElementsAre(0xBB, 0xCC));
+   EXPECT_THAT(readSome(64, 0ms), IsEmpty());
+}
+
+TEST_F(PtySerialPort, ReadSomeRaisesWhenThePeerHangsUp)
+{
+   _peer.hangUp();
+
+   EXPECT_THAT([&] { (void)readSome(64, 500ms); }, ThrowsMessage<SerialError>(HasSubstr("serial")));
+}
+
 TEST_F(PtySerialPort, WriteReachesThePeer)
 {
    const std::vector<uint8_t> frame = {0x9A, 0x00, 0xE3, 0x00};
@@ -142,8 +249,9 @@ TEST_F(PtySerialPort, OpenRejectsABaudRateThePlatformHasNoConstantFor)
    _port.close();
    SerialPort port;
 
-   EXPECT_THAT([&] { port.open(_peer.slavePath(), 12345); },
-               ThrowsMessage<SerialError>(StrEq("unsupported baud rate 12345")));
+   EXPECT_THAT(
+      [&] { port.open(_peer.slavePath(), 12345); },
+      ThrowsMessage<SerialError>(StrEq("serial port '" + _peer.slavePath() + "': unsupported baud rate 12345")));
 }
 #endif
 } // namespace

@@ -13,13 +13,11 @@ Contains
 
 ### Build Dependencies
 
-- **C++11 Compiler**: GCC 4.8+, Clang 3.4+, or MSVC 2015+
-- **CMake**: 3.10 or higher
-- **libserialport**: Cross-platform serial port library
+- **C++17 compiler and CMake 3.16+**: the floor all robotiq-sdk C++ SDKs share ([toolchain](../../README.md#c-toolchain)). Only the SDK's own sources need C++17: its public headers stay C++11-clean, so code that uses the SDK can still build as C++11.
+- **A full robotiq-sdk checkout**: the SDK compiles in the serial transport it shares with the grippers SDK (`common/serial` at the repository root). No serial library to install.
 
 ### Runtime Dependencies
 
-- **libserialport**: Must be installed on the system
 - **USB Permissions** (Linux only): User must have access to serial ports
 
 ## Installation
@@ -40,7 +38,6 @@ launch just quick start with
 ```
   ./build/Quick_start /dev/rq_tsf85_0  
 ```
-
 
 The `Quick_start` example displays real-time sensor data with ASCII visualization of the tactile pressure arrays. There is a logic in the script that waits for a 
 DISPLAY_UPDATE_INTERVAL_MS (currently set to 16ms) to ensure a nice smooth visulization. THis can be tuned. The packets are still sent and recieved at 1000hz. 
@@ -73,6 +70,27 @@ Timestamp:      27678
 ```
 
 
+### Building by hand (any platform)
+
+`setup_and_run.sh` is for Linux with `apt-get`. Elsewhere, or to build without it, from the repository root:
+
+```bash
+cmake -S tsf/sdk_cpp -B build/tsf -DCMAKE_BUILD_TYPE=Release
+cmake --build build/tsf --config Release
+```
+
+On Windows the port is a `COMx` name: `build\tsf\Release\Quick_start.exe COM4`.
+
+The unit tests play the sensor on a pseudo-terminal, so they need no hardware. They fetch GoogleTest when it is not installed, hence off by default:
+
+```bash
+cmake -S tsf/sdk_cpp -B build/tsf -DCMAKE_BUILD_TYPE=Release -DTSF_BUILD_TESTS=ON
+cmake --build build/tsf --config Release
+ctest --test-dir build/tsf -C Release
+```
+
+On Windows, which has no pseudo-terminals, only the tests that need none run.
+
 ## API Reference
 
 ### RobotiqTactileSensor Class
@@ -89,10 +107,11 @@ public:
     // Destructor: Stops thread and closes port
     ~RobotiqTactileSensor();
 
-    // Check if port opened successfully
+    // False when the port could not be opened, or once the sensor is lost
+    // at runtime (unplugged, port error), which also stops data collection
     bool isConnected() const;
 
-    // Get last error message
+    // Get last error message; after a runtime loss, the port failure
     const char* getLastError() const;
 
     // Get current data rate (bytes/sec)
@@ -101,6 +120,12 @@ public:
     // Manually stop/start data collection
     void stop();
     void start();
+
+    // Query the firmware version; needs data collection running
+    bool getFirmwareVersion(std::string& version, unsigned int timeout_ms = 2000);
+
+    // Average 1000 samples into baseline
+    bool findBaseline(Fingers& baseline);
 };
 ```
 
@@ -227,25 +252,9 @@ Aplly `udev` rules in the utils folder:
 
 ### No Data Received
 
-1. **Increase timeout**: Modify `sp_wait()` timeout in `threadLoop()`
-2. **Check CRC errors**: CRC mismatches indicate communication issues
-3. **Verify power**: Ensure sensor has adequate USB power
-4. **Test with lower rate**: Try `period_ms = 10` instead of `1`
-
-### Build Errors
-
-**"libserialport not found"**:
-```bash
-# Ubuntu/Debian
-sudo apt-get install libserialport-dev
-
-```
-
-**"undefined reference to pthread"**:
-```bash
-# Add -lpthread to linker flags
-g++ ... -lpthread
-```
+1. **Check the connection**: if `isConnected()` turned false, `getLastError()` says why the port was lost
+2. **Verify power**: Ensure sensor has adequate USB power
+3. **Test with lower rate**: Try `period_ms = 10` instead of `1`
 
 ## Performance Notes
 
@@ -262,8 +271,9 @@ The SDK uses a non blocking threaded architecture:
 User Application Thread          Background USB Thread
 -------------------              ---------------------
 
-RobotiqTactileSensor()  ------>  Start thread
-                                 Configure serial port
+RobotiqTactileSensor()
+  Open and configure the port
+                        ------>  Start thread
                                  Send autosend command
 
                                  Loop:
@@ -301,6 +311,5 @@ For issues, questions, or contributions:
 
 ## References
 
-- [libserialport Documentation](https://sigrok.org/wiki/Libserialport)
 - [Robotiq Sensor Documentation](https://robotiq.com/)
 - Original tactile_sensor_ui: `../tactile_sensor_ui/`
