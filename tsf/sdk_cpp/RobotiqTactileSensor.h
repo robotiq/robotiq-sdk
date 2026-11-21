@@ -110,6 +110,8 @@ public:
     /**
      * @brief Query the firmware version string from the sensor
      *
+     * Needs data collection running.
+     *
      * @param version Output parameter receiving the ASCII firmware version
      * @param timeout_ms Maximum time to wait for a reply (default 2000 ms)
      * @return false on failure; getLastError() says why
@@ -178,6 +180,7 @@ private:
     std::string m_versionError;
     bool m_versionReady;
     std::atomic<bool> m_versionRequested;
+    bool m_collecting;
 
     // Prevent copying
     RobotiqTactileSensor(const RobotiqTactileSensor&) = delete;

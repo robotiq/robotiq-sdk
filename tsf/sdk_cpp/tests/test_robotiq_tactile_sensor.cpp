@@ -173,6 +173,32 @@ TEST_F(TactileSensorOverPty, LosingTheSensorDisconnectsAndReportsWhy)
         << m_sdk->getLastError();
 }
 
+TEST_F(TactileSensorOverPty, AFirmwareVersionQueryEndsWhenTheSensorIsLost)
+{
+    connect();
+
+    std::string version;
+    std::future<bool> answered = std::async(std::launch::async, [&] {
+        return m_sdk->getFirmwareVersion(version, 10000);
+    });
+    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
+    m_hub.hangUp();
+
+    ASSERT_EQ(answered.wait_for(10s), std::future_status::ready);
+    EXPECT_FALSE(answered.get());
+    EXPECT_FALSE(m_sdk->isConnected());
+}
+
+TEST_F(TactileSensorOverPty, AFirmwareVersionQueryNeedsCollectionRunning)
+{
+    connect();
+    m_sdk->stop();
+
+    std::string version;
+    EXPECT_FALSE(m_sdk->getFirmwareVersion(version));
+    EXPECT_STREQ(m_sdk->getLastError(), "Cannot query firmware version: data collection is stopped");
+}
+
 TEST_F(TactileSensorOverPty, AFirmwareVersionQueryTimesOutWithoutAReply)
 {
     connect();
@@ -202,6 +228,27 @@ TEST_F(TactileSensorOverPty, ALateFirmwareVersionReplyIsNotServedToTheNextQuery)
     EXPECT_FALSE(m_sdk->getFirmwareVersion(version, 20));
     EXPECT_STREQ(m_sdk->getLastError(), "Timeout waiting for firmware version reply");
     EXPECT_EQ(request.get(), GET_VERSION);
+}
+
+TEST_F(TactileSensorOverPty, StopEndsAWaitingFirmwareVersionQuery)
+{
+    connect();
+
+    std::string version;
+    std::future<bool> answered = std::async(std::launch::async, [&] {
+        return m_sdk->getFirmwareVersion(version, 10000);
+    });
+    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
+    // A macOS pty holds the stop frame until the hub reads it.
+    std::future<std::vector<uint8_t> > stopFrame = std::async(std::launch::async, [this] {
+        return m_hub.receive(5);
+    });
+    m_sdk->stop();
+
+    ASSERT_EQ(answered.wait_for(10s), std::future_status::ready);
+    EXPECT_FALSE(answered.get());
+    EXPECT_STREQ(m_sdk->getLastError(), "Data collection stopped before the firmware version reply");
+    EXPECT_EQ(stopFrame.get(), autosend(0));
 }
 
 TEST_F(TactileSensorOverPty, ReassemblesAFrameSplitAcrossReads)
