@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 
 # One version for the whole robotiq-sdk repository, kept in its root VERSION
 # file (see the root README, "Versioning").
@@ -10,22 +10,19 @@ endif()
 
 project(RobotiqTactileSensorSDK VERSION ${ROBOTIQ_SDK_VERSION} LANGUAGES CXX)
 
-# Set C++ standard
-set(CMAKE_CXX_STANDARD 11)
+# Not propagated: the public headers stay C++11-clean.
+if(NOT DEFINED CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Find libserialport (required dependency)
-find_library(SERIALPORT_LIBRARY NAMES serialport libserialport REQUIRED)
-find_path(SERIALPORT_INCLUDE_DIR libserialport.h REQUIRED)
+# No existence check: the RobotiqSdkVersion.cmake one above covers cmake/.
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/RobotiqCommon.cmake")
 
 # Find pthread (required for std::thread)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
-# Display found libraries
-message(STATUS "Found libserialport: ${SERIALPORT_LIBRARY}")
-message(STATUS "libserialport include dir: ${SERIALPORT_INCLUDE_DIR}")
 
 # SDK Library
 add_library(RobotiqTactileSensor STATIC
@@ -38,14 +35,14 @@ add_library(RobotiqTactileSensor STATIC
 target_include_directories(RobotiqTactileSensor
     PUBLIC
         ${CMAKE_CURRENT_SOURCE_DIR}
-        ${SERIALPORT_INCLUDE_DIR}
 )
 
 target_link_libraries(RobotiqTactileSensor
     PUBLIC
-        ${SERIALPORT_LIBRARY}
         Threads::Threads
 )
+
+robotiq_link_common(RobotiqTactileSensor serial)
 
 # Quick Start Example Executable
 add_executable(Quick_start
@@ -76,6 +73,13 @@ target_link_libraries(test_packet_analysis
     PRIVATE
         RobotiqTactileSensor
 )
+
+# Off by default: setup_and_run.sh should not have to fetch GoogleTest.
+option(TSF_BUILD_TESTS "Build the unit tests" OFF)
+if(TSF_BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(tests)
+endif()
 
 # Installation rules
 install(TARGETS RobotiqTactileSensor Quick_start

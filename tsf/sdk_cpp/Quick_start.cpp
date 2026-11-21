@@ -215,11 +215,10 @@ int main(int argc, char* argv[])
     {
         std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
-        // Periodically show data rate
-        uint64_t dataRate = sensor.getDataRate();
-        if (dataRate > 0)
+        if (!sensor.isConnected())
         {
-            // Data rate is shown in the callback, so we don't need to print it here
+            std::cerr << "\nERROR: " << sensor.getLastError() << std::endl;
+            return 1;
         }
     }
 

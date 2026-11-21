@@ -90,6 +90,12 @@ int main(int argc, char* argv[])
     while (g_running)
     {
         std::this_thread::sleep_for(std::chrono::seconds(1));
+
+        if (!sensor.isConnected())
+        {
+            std::cerr << "\nERROR: " << sensor.getLastError() << std::endl;
+            return 1;
+        }
     }
 
     std::cout << "\n========================================" << std::endl;

@@ -4,7 +4,7 @@ Code shared by the SDKs of this repository. It is internal: no module here is a 
 
 | Module | What it holds | Used by |
 |--------|---------------|---------|
-| [serial/](serial/) | The OS serial transport: `SerialPort` (termios on Linux and macOS, the Win32 comm API on Windows) and the `SerialError` it throws | grippers |
+| [serial/](serial/) | The OS serial transport: `SerialPort` (termios on Linux and macOS, the Win32 comm API on Windows) and the `SerialError` it throws | grippers, tsf |
 | [latency_timer/](latency_timer/) | The Linux FTDI `latency_timer`, set through sysfs, for SDKs whose devices sit behind an FTDI USB-serial adapter | grippers |
 
 ## Using a module
