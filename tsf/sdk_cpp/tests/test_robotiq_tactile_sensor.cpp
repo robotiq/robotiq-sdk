@@ -251,6 +251,32 @@ TEST_F(TactileSensorOverPty, StopEndsAWaitingFirmwareVersionQuery)
     EXPECT_EQ(stopFrame.get(), autosend(0));
 }
 
+TEST_F(TactileSensorOverPty, RestartsAfterStop)
+{
+    connect(5);
+    std::future<std::vector<uint8_t> > stopFrame = std::async(std::launch::async, [this] {
+        return m_hub.receive(5);
+    });
+    m_sdk->stop();
+    ASSERT_EQ(stopFrame.get(), autosend(0));
+
+    m_sdk->start();
+
+    ASSERT_EQ(m_hub.receive(5), autosend(5));
+    ASSERT_TRUE(m_hub.send(temperature(0x0042)));
+    EXPECT_TRUE(waitFor([] { return g_samples > 0; }));
+    EXPECT_EQ(g_temperature, 0x0042);
+
+    std::string version;
+    std::future<bool> answered = std::async(std::launch::async, [&] {
+        return m_sdk->getFirmwareVersion(version);
+    });
+    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
+    ASSERT_TRUE(m_hub.send(versionReply("2.3.1")));
+    EXPECT_TRUE(answered.get()) << m_sdk->getLastError();
+    EXPECT_EQ(version, "2.3.1");
+}
+
 TEST_F(TactileSensorOverPty, ReassemblesAFrameSplitAcrossReads)
 {
     connect();

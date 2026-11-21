@@ -75,6 +75,8 @@ public:
 
     /**
      * @brief Destructor - Stops thread and closes port
+     *
+     * Never call from the data callback, which runs on the thread it joins.
      */
     ~RobotiqTactileSensor();
 
@@ -99,11 +101,15 @@ public:
 
     /**
      * @brief Manually stop data collection
+     *
+     * Returns at once: the data callback may still fire shortly after.
      */
     void stop();
 
     /**
      * @brief Manually start data collection (after stop)
+     *
+     * Never call from the data callback.
      */
     void start();
 
