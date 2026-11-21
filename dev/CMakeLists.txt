@@ -22,31 +22,19 @@ enable_testing()
 set(GRIPPERS_BUILD_EXAMPLES ON CACHE BOOL "Build example programs")
 set(GRIPPERS_BUILD_TESTS ON CACHE BOOL "Build the unit tests")
 set(GRIPPERS_WARNINGS_AS_ERRORS ON CACHE BOOL "Treat compiler warnings as errors")
+set(TSF_BUILD_TESTS ON CACHE BOOL "Build the unit tests")
 
 # Each SDK keeps its own project(); they sit side by side purely so the code
 # model sees them together.
 set(ROBOTIQ_IDE_SDKS
   grippers/sdk_cpp
+  tsf/sdk_cpp
 )
-
-# The TSF SDK needs libserialport, and its own find_library(... REQUIRED) would
-# stop the whole configure without it. Skip TSF instead, so the grippers SDK
-# still opens. Same cache variables as TSF's, so TSF reuses what is found here.
-# Temporary: TSF is to drop libserialport and manage serial as the grippers SDK.
-find_library(SERIALPORT_LIBRARY NAMES serialport libserialport)
-find_path(SERIALPORT_INCLUDE_DIR libserialport.h)
-if(SERIALPORT_LIBRARY AND SERIALPORT_INCLUDE_DIR)
-  list(APPEND ROBOTIQ_IDE_SDKS tsf/sdk_cpp)
-else()
-  message(STATUS "robotiq_sdk_ide: libserialport not found; skipping the TSF SDK")
-endif()
 
 foreach(sdk IN LISTS ROBOTIQ_IDE_SDKS)
   string(REPLACE "/" "_" name ${sdk})
   add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../${sdk} ${CMAKE_CURRENT_BINARY_DIR}/${name})
 endforeach()
 
-# The tests of the shared modules. Last, so each module is already added by
-# an SDK and robotiq_link_common() reuses it, as it must when several SDKs
-# link one module.
+# Last, so robotiq_link_common() reuses the modules the SDKs added.
 add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../common ${CMAKE_CURRENT_BINARY_DIR}/common)

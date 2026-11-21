@@ -58,6 +58,12 @@ int main(int argc, char* argv[])
     {
         std::this_thread::sleep_for(std::chrono::seconds(1));
 
+        if (!sensor.isConnected())
+        {
+            std::cerr << "\nERROR: " << sensor.getLastError() << std::endl;
+            return 1;
+        }
+
         uint64_t rate = sensor.getDataRate();
         std::cout << "Data rate: " << rate << " bytes/sec, "
                   << "Total samples: " << g_sampleCount << std::endl;

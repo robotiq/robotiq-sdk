@@ -15,7 +15,11 @@ Each product folder has its own README with requirements, build steps and quicks
 
 Code the C++ SDKs share, such as the serial transport, lives in [common/](common/). It is internal: each SDK compiles it into its own library, and it is neither installed nor part of any SDK's API.
 
-To work on every C++ SDK at once, open [dev/CMakeLists.txt](dev/CMakeLists.txt) in your IDE with its `ide` preset. It is a developer convenience only: each SDK still builds on its own. Without libserialport, it skips the TSF SDK.
+To work on every C++ SDK at once, open [dev/CMakeLists.txt](dev/CMakeLists.txt) in your IDE with its `ide` preset. It is a developer convenience only: each SDK still builds on its own.
+
+## C++ toolchain
+
+The C++ SDKs share one floor: CMake 3.16 and a C++17 compiler, which on Linux means GCC 9 or Clang 9 or newer; Apple Clang on macOS; MSVC 2017 (Visual Studio 2017) or newer on Windows.
 
 ## Versioning
 

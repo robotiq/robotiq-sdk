@@ -69,7 +69,7 @@ Platform utilities for device setup:
 
 | Component | Dependencies |
 |-----------|-------------|
-| sdk_cpp | C++11 compiler, CMake 3.10+, libserialport |
+| sdk_cpp | C++17 compiler and CMake 3.16+ ([toolchain floor](../README.md#c-toolchain)) |
 | sensor_quickstart | Python 3.10+ (installed by the launch scripts if missing) |
 | tactile_sensor_ui | Qt, CMake (or Docker) |
 
