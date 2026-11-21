@@ -7,6 +7,8 @@
 
 #include <Robotiq/common/serial_port.hpp>
 
+#include "../comm_timeouts.hpp"
+
 #define WIN32_LEAN_AND_MEAN
 // Recent toolchains predefine NOMINMAX; redefining it is a warning, fatal
 // under warnings-as-errors.
@@ -29,6 +31,8 @@
 namespace Robotiq::common {
 namespace {
 using std::chrono::milliseconds;
+
+static_assert(detail::kMaxDword == MAXDWORD, "comm_timeouts.hpp's MAXDWORD");
 
 [[noreturn]] void fail(const std::string& context, DWORD error)
 {
@@ -112,7 +116,7 @@ void SerialPort::open(const std::string& port, uint32_t baudrate)
       configure(_handle, baudrate);
       // Establishes the cached pair, so later reads and writes only
       // re-enter the driver when the timeout actually changes.
-      setTimeouts(0, 0);
+      setTimeouts(ReadMode::Full, 0, 0);
    }
    catch(...)
    {
@@ -127,47 +131,53 @@ void SerialPort::close()
    {
       ::CloseHandle(_handle);
       _handle = nullptr;
+      _readMode = ReadMode::Full;
       _readTimeoutMs = -1;
       _writeTimeoutMs = -1;
    }
 }
 
-void SerialPort::setTimeouts(int64_t readMs, int64_t writeMs)
+void SerialPort::setTimeouts(ReadMode mode, int64_t readMs, int64_t writeMs)
 {
-   if(readMs == _readTimeoutMs && writeMs == _writeTimeoutMs)
+   if(mode == _readMode && readMs == _readTimeoutMs && writeMs == _writeTimeoutMs)
    {
       return;
    }
 
+   const detail::CommTimeouts wanted =
+      detail::commTimeouts(mode == ReadMode::Some, static_cast<uint32_t>(readMs), static_cast<uint32_t>(writeMs));
    COMMTIMEOUTS timeouts = {};
-   if(readMs == 0)
-   {
-      // Documented as "return immediately with whatever is buffered": a
-      // zero-timeout read.
-      timeouts.ReadIntervalTimeout = MAXDWORD;
-   }
-   else
-   {
-      // ReadFile returns once the full count arrives or this elapses.
-      timeouts.ReadTotalTimeoutConstant = static_cast<DWORD>(readMs);
-   }
-   timeouts.WriteTotalTimeoutConstant = static_cast<DWORD>(writeMs);
+   timeouts.ReadIntervalTimeout = wanted.readInterval;
+   timeouts.ReadTotalTimeoutMultiplier = wanted.readMultiplier;
+   timeouts.ReadTotalTimeoutConstant = wanted.readConstant;
+   timeouts.WriteTotalTimeoutConstant = wanted.writeConstant;
 
    if(!::SetCommTimeouts(_handle, &timeouts))
    {
       fail("setting the serial port timeouts", ::GetLastError());
    }
+   _readMode = mode;
    _readTimeoutMs = readMs;
    _writeTimeoutMs = writeMs;
 }
 
 size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout)
 {
+   return read(data, size, timeout, ReadMode::Full);
+}
+
+size_t SerialPort::readSome(uint8_t* data, size_t size, milliseconds timeout)
+{
+   return read(data, size, timeout, ReadMode::Some);
+}
+
+size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout, ReadMode mode)
+{
    if(size == 0)
    {
       return 0;
    }
-   setTimeouts(timeout.count(), _writeTimeoutMs);
+   setTimeouts(mode, timeout.count(), _writeTimeoutMs);
 
    DWORD received = 0;
    if(!::ReadFile(_handle, data, static_cast<DWORD>(size), &received, nullptr))
@@ -183,7 +193,7 @@ size_t SerialPort::write(const uint8_t* data, size_t size, milliseconds timeout)
    {
       return 0;
    }
-   setTimeouts(_readTimeoutMs, timeout.count());
+   setTimeouts(_readMode, _readTimeoutMs, timeout.count());
 
    DWORD sent = 0;
    if(!::WriteFile(_handle, data, static_cast<DWORD>(size), &sent, nullptr))

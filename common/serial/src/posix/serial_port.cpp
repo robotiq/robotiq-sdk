@@ -254,6 +254,16 @@ void SerialPort::close()
 
 size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout)
 {
+   return read(data, size, timeout, ReadMode::Full);
+}
+
+size_t SerialPort::readSome(uint8_t* data, size_t size, milliseconds timeout)
+{
+   return read(data, size, timeout, ReadMode::Some);
+}
+
+size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout, ReadMode mode)
+{
    const auto deadline = steady_clock::now() + timeout;
    size_t received = 0;
    bool polledReadable = false;
@@ -263,6 +273,10 @@ size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout)
       if(count > 0)
       {
          received += static_cast<size_t>(count);
+         if(mode == ReadMode::Some)
+         {
+            break;
+         }
          continue;
       }
       if(count == 0 && polledReadable)

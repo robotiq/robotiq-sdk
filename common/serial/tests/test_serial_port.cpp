@@ -8,6 +8,7 @@
 #include <Robotiq/common/serial_error.hpp>
 #include <Robotiq/common/serial_port.hpp>
 
+#include "comm_timeouts.hpp"
 #include "drain_wait.hpp"
 
 #include <chrono>
@@ -58,6 +59,26 @@ TEST(DrainWait, IsCappedWithoutADeadline)
    EXPECT_EQ(detail::drainWait(1280, kByteTime, std::chrono::nanoseconds::max()), detail::kMaxDrainPoll);
 }
 
+using detail::CommTimeouts;
+using detail::commTimeouts;
+using detail::kMaxDword;
+
+TEST(CommTimeouts, AZeroReadTimeoutTakesWhatIsBufferedInEitherMode)
+{
+   EXPECT_EQ(commTimeouts(false, 0, 100), (CommTimeouts{kMaxDword, 0, 0, 100}));
+   EXPECT_EQ(commTimeouts(true, 0, 100), (CommTimeouts{kMaxDword, 0, 0, 100}));
+}
+
+TEST(CommTimeouts, AFullReadWaitsForTheCountOrTheConstant)
+{
+   EXPECT_EQ(commTimeouts(false, 500, 100), (CommTimeouts{0, 0, 500, 100}));
+}
+
+TEST(CommTimeouts, APartialReadReturnsOnAnyByteOrTheConstant)
+{
+   EXPECT_EQ(commTimeouts(true, 500, 100), (CommTimeouts{kMaxDword, kMaxDword, 500, 100}));
+}
+
 TEST(SerialPort, OpeningAMissingPortNamesIt)
 {
    SerialPort port;
@@ -90,6 +111,13 @@ protected:
    {
       std::vector<uint8_t> data(size);
       data.resize(_port.read(data.data(), data.size(), timeout));
+      return data;
+   }
+
+   [[nodiscard]] std::vector<uint8_t> readSome(size_t size, std::chrono::milliseconds timeout)
+   {
+      std::vector<uint8_t> data(size);
+      data.resize(_port.readSome(data.data(), data.size(), timeout));
       return data;
    }
 
@@ -128,6 +156,51 @@ TEST_F(PtySerialPort, ReadRaisesWhenThePeerHangsUp)
    _peer.hangUp();
 
    EXPECT_THAT([&] { (void)read(64, 500ms); }, ThrowsMessage<SerialError>(HasSubstr("serial")));
+}
+
+TEST_F(PtySerialPort, ReadSomeReturnsWhatIsBufferedWithoutWaitingForTheFullCount)
+{
+   ASSERT_TRUE(_peer.send({0xAA, 0xBB, 0xCC}));
+
+   const auto start = std::chrono::steady_clock::now();
+   EXPECT_THAT(readSome(64, 2s), ElementsAre(0xAA, 0xBB, 0xCC));
+   EXPECT_LT(std::chrono::steady_clock::now() - start, 1s);
+}
+
+TEST_F(PtySerialPort, ReadSomeWaitsForAByteThatHasNotArrivedYet)
+{
+   // Repeated so some rounds find the port empty.
+   for(int round = 0; round < 32; ++round)
+   {
+      std::thread late([this] { EXPECT_TRUE(_peer.send({0x42})); });
+      const auto data = readSome(64, 2s);
+      late.join();
+
+      ASSERT_THAT(data, ElementsAre(0x42));
+   }
+}
+
+TEST_F(PtySerialPort, ReadSomeReturnsNothingFromASilentPeer)
+{
+   EXPECT_THAT(readSome(64, 20ms), IsEmpty());
+}
+
+TEST_F(PtySerialPort, AZeroTimeoutReadSomeTakesOnlyWhatIsBuffered)
+{
+   ASSERT_TRUE(_peer.send({0xAA, 0xBB, 0xCC}));
+
+   // As for read(): this blocking byte settles the two behind it.
+   ASSERT_THAT(readSome(1, 2s), ElementsAre(0xAA));
+
+   EXPECT_THAT(readSome(64, 0ms), ElementsAre(0xBB, 0xCC));
+   EXPECT_THAT(readSome(64, 0ms), IsEmpty());
+}
+
+TEST_F(PtySerialPort, ReadSomeRaisesWhenThePeerHangsUp)
+{
+   _peer.hangUp();
+
+   EXPECT_THAT([&] { (void)readSome(64, 500ms); }, ThrowsMessage<SerialError>(HasSubstr("serial")));
 }
 
 TEST_F(PtySerialPort, WriteReachesThePeer)
