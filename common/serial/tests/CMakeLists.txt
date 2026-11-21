@@ -6,4 +6,6 @@ target_link_libraries(robotiq_common_serial_tests PRIVATE
   GTest::gtest_main
   robotiq_common_warnings
 )
+# The module's internal headers.
+target_include_directories(robotiq_common_serial_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 gtest_discover_tests(robotiq_common_serial_tests)

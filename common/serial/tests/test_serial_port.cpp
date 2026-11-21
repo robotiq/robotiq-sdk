@@ -8,6 +8,8 @@
 #include <Robotiq/common/serial_error.hpp>
 #include <Robotiq/common/serial_port.hpp>
 
+#include "drain_wait.hpp"
+
 #include <chrono>
 #include <string>
 #include <thread>
@@ -31,6 +33,30 @@ const std::string kMissingPort = "COM255";
 #else
 const std::string kMissingPort = "/dev/this_should_not_exist";
 #endif
+
+// 115200 baud, 8N1: a byte takes ~87 us.
+constexpr std::chrono::nanoseconds kByteTime = 86806ns;
+
+TEST(DrainWait, IsTheTimeTheQueueTakesWhenThatIsShort)
+{
+   EXPECT_EQ(detail::drainWait(4, kByteTime, 50ms), 4 * kByteTime);
+}
+
+// cdc-acm reports its whole 1280-byte buffer: ~111 ms at the line rate.
+TEST(DrainWait, IsCappedForAnOverstatedQueue)
+{
+   EXPECT_EQ(detail::drainWait(1280, kByteTime, 50ms), detail::kMaxDrainPoll);
+}
+
+TEST(DrainWait, NeverRunsPastTheDeadline)
+{
+   EXPECT_EQ(detail::drainWait(1280, kByteTime, 200us), 200us);
+}
+
+TEST(DrainWait, IsCappedWithoutADeadline)
+{
+   EXPECT_EQ(detail::drainWait(1280, kByteTime, std::chrono::nanoseconds::max()), detail::kMaxDrainPoll);
+}
 
 TEST(SerialPort, OpeningAMissingPortNamesIt)
 {
