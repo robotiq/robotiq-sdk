@@ -2,15 +2,8 @@
 //
 // Licensed under the BSD-3-Clause license; see LICENSE for details.
 
-//! \brief The OS serial handle behind DefaultSerial — termios on
-//!        Linux/macOS, the Win32 comm API on Windows.
-//! One translation unit per platform family implements it (posix/,
-//! win32/); the header is internal to the SDK, since the transport seam
-//! consumers extend is Robotiq::Serial.
-//! Every operation reports failure as SerialIOException. The read
-//! contract is the one Robotiq::Serial documents: a zero timeout takes
-//! only what is already buffered, a positive one waits for \p size bytes
-//! or the deadline, whichever comes first.
+//! \brief The OS serial port the Robotiq SDKs share, internal to them.
+//! Failures throw SerialError. Not thread-safe.
 
 #pragma once
 
@@ -19,7 +12,7 @@
 #include <cstdint>
 #include <string>
 
-namespace Robotiq::detail {
+namespace Robotiq::common {
 class SerialPort
 {
 public:
@@ -35,16 +28,18 @@ public:
    // Release the handle. Safe to call when already closed.
    void close();
 
-   // Bytes actually read — fewer than size when the deadline passed first.
+   // Bytes actually read — fewer than size when the deadline passed first. A
+   // zero timeout takes only what is buffered.
    [[nodiscard]] size_t read(uint8_t* data, size_t size, std::chrono::milliseconds timeout);
 
    // Bytes actually written; a short count means the write timed out. A
    // zero timeout never times out.
    [[nodiscard]] size_t write(const uint8_t* data, size_t size, std::chrono::milliseconds timeout);
 
-   // Block until the bytes written have left the transmit buffer; false
-   // when the timeout passed first. A zero timeout never times out, and
-   // Windows leaves the wait to its driver.
+   // Block until the bytes written have left; false when the timeout passed
+   // first. It bounds the driver's output queue, not the final tcdrain(),
+   // and Windows leaves the whole wait to its driver. A zero timeout never
+   // times out.
    [[nodiscard]] bool drain(std::chrono::milliseconds timeout);
 
 private:
@@ -62,4 +57,4 @@ private:
    uint32_t _baudrate = 0;
 #endif
 };
-} // namespace Robotiq::detail
+} // namespace Robotiq::common

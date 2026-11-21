@@ -29,8 +29,11 @@ namespace Robotiq {
 class Logger;
 } // namespace Robotiq
 
-namespace Robotiq::detail {
+namespace Robotiq::common {
 class SerialPort;
+} // namespace Robotiq::common
+
+namespace Robotiq::detail {
 
 class DefaultSerial : public Serial
 {
@@ -56,21 +59,10 @@ public:
    [[nodiscard]] const SerialConfig& getConfig() const;
 
 private:
-   // Best-effort sysfs write; returns false when it could not be applied.
-   [[nodiscard]] bool applyLatencyTimer(const std::string& path) const;
-
    // Null when closed; the OS handle lives inside it.
-   std::unique_ptr<SerialPort> _port;
+   std::unique_ptr<common::SerialPort> _port;
    SerialConfig _config;
    std::shared_ptr<Logger> _logger;
 };
-
-#ifdef __linux__
-// Symlinks (/dev/serial/by-id, socat links) are followed to the device
-// node, whose name is the sysfs entry. Empty when the port is not an FTDI
-// adapter.
-[[nodiscard]] std::string latencyTimerPath(const std::string& port,
-                                           const std::string& sysfsDevices = "/sys/bus/usb-serial/devices");
-#endif
 
 } // namespace Robotiq::detail
