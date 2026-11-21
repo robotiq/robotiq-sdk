@@ -274,6 +274,7 @@ RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
     , m_calculatingBaseline(false)
     , m_versionReady(false)
     , m_versionRequested(false)
+    , m_collecting(false)
 {
     auto port = std::make_unique<Port>();
     try
@@ -289,6 +290,7 @@ RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
 
     m_connected = true;
     m_running = true;
+    m_collecting = true;
 
     // Start data collection thread
     m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
@@ -344,6 +346,12 @@ bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int
         return false;
     }
 
+    if (!m_running)
+    {
+        m_lastError = "Cannot query firmware version: data collection is stopped";
+        return false;
+    }
+
     std::unique_lock<std::mutex> lk(m_versionMutex);
 
     m_versionReady = false;
@@ -353,18 +361,20 @@ bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int
 
     if (!m_versionCv.wait_for(lk,
                               std::chrono::milliseconds(timeout_ms),
-                              [this] { return m_versionReady || !m_versionError.empty(); }))
+                              [this] { return m_versionReady || !m_versionError.empty() || !m_collecting; }))
     {
         m_lastError = "Timeout waiting for firmware version reply";
         return false;
     }
-    if (!m_versionReady)
+    if (m_versionReady)
     {
-        m_lastError = m_versionError;
-        return false;
+        version = m_firmwareVersion;
+        return true;
     }
-    version = m_firmwareVersion;
-    return true;
+    m_lastError = m_versionError.empty()
+                      ? "Data collection stopped before the firmware version reply"
+                      : m_versionError;
+    return false;
 }
 
 bool RobotiqTactileSensor::findBaseline(Fingers& baseline)
@@ -482,6 +492,13 @@ void RobotiqTactileSensor::threadLoop()
         m_connected = false;
         m_running = false;
     }
+
+    {
+        std::lock_guard<std::mutex> lk(m_versionMutex);
+        m_collecting = false;
+        m_versionRequested = false;
+    }
+    m_versionCv.notify_all();
 }
 
 void RobotiqTactileSensor::collectData()

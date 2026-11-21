@@ -121,7 +121,7 @@ public:
     void stop();
     void start();
 
-    // Query the firmware version
+    // Query the firmware version; needs data collection running
     bool getFirmwareVersion(std::string& version, unsigned int timeout_ms = 2000);
 
     // Average 1000 samples into baseline
