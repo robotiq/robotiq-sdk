@@ -96,6 +96,14 @@ TEST(SerialPort, CloseIsSafeOnAPortNeverOpened)
 }
 
 #ifndef _WIN32
+TEST(SerialPort, AnOpenFailureAfterTheOpenStillNamesThePort)
+{
+   // /dev/null opens but is no terminal, so configuring it fails.
+   SerialPort port;
+   EXPECT_THAT([&] { port.open("/dev/null", 115200); },
+               ThrowsMessage<SerialError>(HasSubstr("serial port '/dev/null': ")));
+}
+
 class PtySerialPort : public ::testing::Test
 {
 protected:
@@ -275,8 +283,9 @@ TEST_F(PtySerialPort, OpenRejectsABaudRateThePlatformHasNoConstantFor)
    _port.close();
    SerialPort port;
 
-   EXPECT_THAT([&] { port.open(_peer.slavePath(), 12345); },
-               ThrowsMessage<SerialError>(StrEq("unsupported baud rate 12345")));
+   EXPECT_THAT(
+      [&] { port.open(_peer.slavePath(), 12345); },
+      ThrowsMessage<SerialError>(StrEq("serial port '" + _peer.slavePath() + "': unsupported baud rate 12345")));
 }
 #endif
 } // namespace
