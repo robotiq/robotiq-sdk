@@ -226,6 +226,11 @@ void SerialPort::open(const std::string& port, uint32_t baudrate)
    {
       configure(fd, baudrate);
    }
+   catch(const SerialError& error)
+   {
+      ::close(fd);
+      throw SerialError("serial port '" + port + "': " + error.what());
+   }
    catch(...)
    {
       ::close(fd);

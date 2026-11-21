@@ -118,6 +118,11 @@ void SerialPort::open(const std::string& port, uint32_t baudrate)
       // re-enter the driver when the timeout actually changes.
       setTimeouts(ReadMode::Full, 0, 0);
    }
+   catch(const SerialError& error)
+   {
+      close();
+      throw SerialError("serial port '" + port + "': " + error.what());
+   }
    catch(...)
    {
       close();
