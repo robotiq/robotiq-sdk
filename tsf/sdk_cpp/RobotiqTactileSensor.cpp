@@ -330,12 +330,19 @@ void RobotiqTactileSensor::stop()
 
 void RobotiqTactileSensor::start()
 {
-    if (!m_running && m_connected)
+    if (m_running || !m_connected)
+        return;
+
+    // The old thread's stop command goes out before the new start command.
+    if (m_thread.joinable())
+        m_thread.join();
     {
-        m_running = true;
-        if (!m_thread.joinable())
-            m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
+        std::lock_guard<std::mutex> lk(m_versionMutex);
+        m_collecting = true;
+        m_versionRequested = false;
     }
+    m_running = true;
+    m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
 }
 
 bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int timeout_ms)
