@@ -35,6 +35,10 @@ public:
    // zero timeout takes only what is buffered.
    [[nodiscard]] size_t read(uint8_t* data, size_t size, std::chrono::milliseconds timeout);
 
+   // Waits up to \p timeout for the first byte, then returns what is
+   // buffered, up to \p size; 0 when nothing arrived.
+   [[nodiscard]] size_t readSome(uint8_t* data, size_t size, std::chrono::milliseconds timeout);
+
    // Bytes actually written; a short count means the write timed out. A
    // zero timeout never times out.
    [[nodiscard]] size_t write(const uint8_t* data, size_t size, std::chrono::milliseconds timeout);
@@ -46,13 +50,23 @@ public:
    [[nodiscard]] bool drain(std::chrono::milliseconds timeout);
 
 private:
+   // Full waits for the whole count, Some for the first chunk.
+   enum class ReadMode
+   {
+      Full,
+      Some,
+   };
+
+   [[nodiscard]] size_t read(uint8_t* data, size_t size, std::chrono::milliseconds timeout, ReadMode mode);
+
 #ifdef _WIN32
    // The COMMTIMEOUTS the handle currently carries, so a steady exchange
    // does not re-enter the driver on every read; -1 until open() applies
-   // the first pair. Both fields live in one struct, hence one cache.
-   void setTimeouts(int64_t readMs, int64_t writeMs);
+   // the first set. All fields live in one struct, hence one cache.
+   void setTimeouts(ReadMode mode, int64_t readMs, int64_t writeMs);
 
    void* _handle = nullptr; // HANDLE, kept untyped to spare callers <windows.h>
+   ReadMode _readMode = ReadMode::Full;
    int64_t _readTimeoutMs = -1;
    int64_t _writeTimeoutMs = -1;
 #else
