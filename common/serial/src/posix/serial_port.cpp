@@ -8,6 +8,8 @@
 
 #include <Robotiq/common/serial_port.hpp>
 
+#include "../drain_wait.hpp"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -340,11 +342,12 @@ bool SerialPort::drain(milliseconds timeout)
    int queued = 0;
    while(::ioctl(_fd, TIOCOUTQ, &queued) == 0 && queued > 0)
    {
-      if(!unbounded && steady_clock::now() >= deadline)
+      const auto remaining = unbounded ? std::chrono::nanoseconds::max() : deadline - steady_clock::now();
+      if(remaining <= std::chrono::nanoseconds::zero())
       {
          return false;
       }
-      std::this_thread::sleep_for(byteTime * queued);
+      std::this_thread::sleep_for(detail::drainWait(queued, byteTime, remaining));
    }
 #else
    (void)timeout;
