@@ -165,12 +165,18 @@ This is what the `api-docs` CI job runs right after `doxygen Doxyfile`
 
 ## generate_device_profiles.py
 
-Writes the device profiles block of `include/Robotiq/gripper/device_profile.hpp`
-from `data/device_profiles.json`: the `profiles::k...` constants and
-`profiles::kNamed`, between the `BEGIN generated` and `END generated` lines.
-The rest of the header is written by hand. Numbers are copied with the exact
-text they have in the JSON, so `0.020` stays `0.020` in C++. It needs Python 3
-and nothing else.
+Writes two headers of `include/Robotiq/gripper/` from
+`data/device_profiles.json`:
+
+- `device_profile.hpp`: only the `profiles::k...` constants, between the
+  `BEGIN generated` and `END generated` lines. The rest of that header is
+  written by hand.
+- `device_profile_names.hpp`: the whole file, which holds the lookup by
+  stable name (`profiles::kNamed`, `profiles::profileNamed`). Do not edit it
+  by hand; its fixed text lives in the script.
+
+Numbers are copied with the exact text they have in the JSON, so `0.020`
+stays `0.020` in C++. It needs Python 3 and nothing else.
 
 It checks the data first and stops with an `error:` line naming the profile
 and field at fault; the `check_...` functions of the script are the list of
@@ -190,14 +196,15 @@ The target exists only when `sdk_cpp` is the top-level project and CMake
 found Python 3. Without a build directory, from `sdk_cpp/`:
 
 ```sh
-python3 tools/generate_device_profiles.py data/device_profiles.json include/Robotiq/gripper/device_profile.hpp
+python3 tools/generate_device_profiles.py data/device_profiles.json \
+  include/Robotiq/gripper/device_profile.hpp include/Robotiq/gripper/device_profile_names.hpp
 ```
 
-Commit the JSON and the header together.
+Commit the JSON and the two headers together.
 
-`--check` writes nothing and exits non-zero when the header is out of date;
-the `device_profiles_header_is_current` test runs it that way.
-`test_generate_device_profiles.py` tests the script itself on temporary
-copies of the two files (`python3 tools/test_generate_device_profiles.py`,
+`--check` writes nothing and exits non-zero when either header is out of
+date, naming it; the `device_profile_headers_are_current` test runs it that
+way. `test_generate_device_profiles.py` tests the script itself on temporary
+copies of the three files (`python3 tools/test_generate_device_profiles.py`,
 or the `device_profiles_generator_tests` test). CI runs both in its
 `device-profiles` job, without CMake.

@@ -15,6 +15,7 @@
 
 #include <Robotiq/gripper.hpp> // Gripper, GripperCommand/Status
 #include <Robotiq/gripper/device_profile.hpp> // DeviceProfile and the shipped profiles
+#include <Robotiq/gripper/device_profile_names.hpp> // profileNamed() and kNamed, the shipped profiles by stable name
 #include <Robotiq/gripper/stderr_logger.hpp>
 #include <Robotiq/gripper/units.hpp>
 

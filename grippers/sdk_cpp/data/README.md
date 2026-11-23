@@ -3,9 +3,10 @@
 `device_profiles.json` holds the gripper profiles the SDK ships: the speed
 range, the opening range and the measured register band of each model. The
 C++ constants in `include/Robotiq/gripper/device_profile.hpp`
-(`profiles::k2F85` and the others) are generated from it, so a program in
-another language that reads this file uses the same values as the C++ SDK
-instead of a copy.
+(`profiles::k2F85` and the others) and the lookup by name in
+`include/Robotiq/gripper/device_profile_names.hpp` are generated from it,
+so a program in another language that reads this file uses the same values
+as the C++ SDK instead of a copy.
 
 ## Where to find it
 
@@ -62,5 +63,5 @@ a version it does not know.
 
 ## Changing a profile
 
-Edit the JSON, regenerate the header and commit both: see
+Edit the JSON, regenerate the headers and commit them with it: see
 [generate_device_profiles.py](../tools/README.md#generate_device_profilespy).
