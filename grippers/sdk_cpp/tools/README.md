@@ -203,7 +203,7 @@ python3 tools/generate_device_profiles.py data/device_profiles.json \
 Commit the JSON and the two headers together.
 
 `--check` writes nothing and exits non-zero when either header is out of
-date, naming it; the `device_profiles_header_is_current` test runs it that
+date, naming it; the `device_profile_headers_are_current` test runs it that
 way. `test_generate_device_profiles.py` tests the script itself on temporary
 copies of the three files (`python3 tools/test_generate_device_profiles.py`,
 or the `device_profiles_generator_tests` test). CI runs both in its

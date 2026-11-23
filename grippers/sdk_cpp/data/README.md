@@ -4,9 +4,9 @@
 range, the opening range and the measured register band of each model. The
 C++ constants in `include/Robotiq/gripper/device_profile.hpp`
 (`profiles::k2F85` and the others) and the lookup by name in
-`include/Robotiq/gripper/device_profile_names.hpp` are generated from it, so a program in
-another language that reads this file uses the same values as the C++ SDK
-instead of a copy.
+`include/Robotiq/gripper/device_profile_names.hpp` are generated from it,
+so a program in another language that reads this file uses the same values
+as the C++ SDK instead of a copy.
 
 ## Where to find it
 

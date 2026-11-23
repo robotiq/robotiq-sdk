@@ -10,9 +10,10 @@ Usage:
     generate_device_profiles.py [--check] <device_profiles.json>
         <device_profile.hpp> <device_profile_names.hpp>
 
-Without --check, each header that changed is rewritten in place. With
---check, nothing is written and the exit status is 1 when a header is out
-of date.
+Without --check, each header that changed is rewritten in place. A missing
+device_profile_names.hpp is created, while a missing device_profile.hpp is
+an error: its text outside the markers is written by hand. With --check,
+nothing is written and the exit status is 1 when a header is out of date.
 """
 
 import argparse
@@ -22,7 +23,8 @@ import re
 import sys
 from pathlib import Path
 
-BEGIN_MARKER = "// BEGIN generated from data/device_profiles.json by tools/generate_device_profiles.py"
+GENERATED_FROM = "data/device_profiles.json by tools/generate_device_profiles.py"
+BEGIN_MARKER = f"// BEGIN generated from {GENERATED_FROM}"
 END_MARKER = "// END generated"
 SCHEMA_VERSION = 1
 NUMBER_FIELDS = (
@@ -43,13 +45,13 @@ REGISTER_MAX = 255
 REGISTER_TEXT = re.compile(r"[0-9]+")
 LINE_BREAK_OR_TAB = re.compile(r"[\n\r\t]")
 COLUMN_LIMIT = 120
-NAMES_HEADER_TOP = """\
+NAMES_HEADER_TOP = f"""\
 // Copyright (c) 2026 Robotiq, Inc.
 //
 // Licensed under the BSD-3-Clause license; see LICENSE for details.
 
-// Generated from data/device_profiles.json by tools/generate_device_profiles.py. Do not edit.
-
+// Generated from {GENERATED_FROM}. Do not edit.
+""" + """
 #pragma once
 
 #include <array>
@@ -309,9 +311,11 @@ def describe(value):
 
 def render(profiles):
     lines = [BEGIN_MARKER]
-    for profile in profiles:
+    for index, profile in enumerate(profiles):
+        if index:
+            lines.append("")
         lines += checked_width(render_profile(profile), profile["name"])
-    lines[-1] = END_MARKER
+    lines.append(END_MARKER)
     return lines
 
 
@@ -335,10 +339,7 @@ def render_profile(profile):
         profile["closed_position"],
         knuckle_slope(profile),
     ]
-    lines += [
-        f"inline constexpr DeviceProfile {profile['constant']}{{{', '.join(values)}}};",
-        "",
-    ]
+    lines.append(f"inline constexpr DeviceProfile {profile['constant']}{{{', '.join(values)}}};")
     return lines
 
 

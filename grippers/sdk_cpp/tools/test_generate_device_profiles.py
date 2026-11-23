@@ -5,6 +5,7 @@ Usage:
     test_generate_device_profiles.py
 """
 
+import json
 import shutil
 import subprocess
 import sys
@@ -145,6 +146,12 @@ REJECTED = (
         '"' + "x" * 130 + '"',
         "longer than 120 columns",
     ),
+    (
+        "a name too long for its table line",
+        '"name": "2f_85"',
+        '"name": "' + "x" * 130 + '"',
+        "longer than 120 columns",
+    ),
 )
 
 
@@ -179,6 +186,9 @@ class GeneratorTest(unittest.TestCase):
         self.assertIn(old, text)
         path.write_bytes(text.replace(old, new, 1).encode("utf-8"))
 
+    def rename_a_profile(self):
+        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+
     def header_text(self):
         return self.header_path.read_bytes().decode("utf-8")
 
@@ -191,7 +201,7 @@ class GeneratorTest(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
         self.assertIn(reason, result.stderr)
 
-    def test_the_shipped_header_is_current(self):
+    def test_the_shipped_headers_are_current(self):
         result = self.generate("--check")
 
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -271,22 +281,36 @@ class GeneratorTest(unittest.TestCase):
         self.assert_rejected(self.generate("--check"), "needs exactly one line")
 
     def test_the_profile_header_holds_no_name_lookup(self):
-        self.generate()
-
         header = self.header_text()
-        for name_side in ("kNamed", "NamedProfile", "profileNamed", "<array>"):
+
+        for name_side in (
+            "kNamed",
+            "NamedProfile",
+            "profileNamed",
+            "<array>",
+            "<optional>",
+            "<string_view>",
+        ):
             self.assertNotIn(name_side, header)
 
     def test_the_names_header_lists_each_profile_in_data_file_order(self):
-        names = self.names_text()
+        data = json.loads(self.json_path.read_text(encoding="utf-8"))
+        hand_e = next(p for p in data["profiles"] if p["name"] == "hand_e_c10")
+        data["profiles"].remove(hand_e)
+        data["profiles"].insert(0, hand_e)
+        self.json_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
+        result = self.generate()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        names = self.names_text()
         self.assertIn("std::array<NamedProfile, 5> kNamed{{", names)
         self.assertLess(
-            names.index('{"2f_85", k2F85},'), names.index('{"hand_e_c10", kHandEC10},')
+            names.index('{"hand_e_c10", kHandEC10},'), names.index('{"2f_85", k2F85},')
         )
 
     def test_check_fails_on_a_stale_names_header_and_writes_nothing(self):
-        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+        self.rename_a_profile()
         before = self.names_text()
 
         result = self.generate("--check")
@@ -297,7 +321,7 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(self.names_text(), before)
 
     def test_writing_brings_a_stale_names_header_up_to_date(self):
-        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+        self.rename_a_profile()
 
         result = self.generate()
 
@@ -313,6 +337,16 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertIn("device_profile.hpp is out of date", result.stderr)
         self.assertIn("device_profile_names.hpp is out of date", result.stderr)
+
+    def test_writing_brings_both_stale_headers_up_to_date(self):
+        self.edit(self.json_path, '"constant": "kHandEC10"', '"constant": "kHandEC12"')
+
+        result = self.generate()
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("kHandEC12{", self.header_text())
+        self.assertIn('{"hand_e_c10", kHandEC12},', self.names_text())
+        self.assertEqual(self.generate("--check").returncode, 0)
 
     def test_a_hand_edit_anywhere_in_the_names_header_is_overwritten(self):
         shipped = self.names_text()
@@ -342,17 +376,12 @@ class GeneratorTest(unittest.TestCase):
             self.names_text().replace("\n", "\r\n").encode("utf-8")
         )
         self.assertEqual(self.generate("--check").returncode, 0)
-        self.edit(self.json_path, '"name": "hand_e_c10"', '"name": "hand_e_c12"')
+        self.rename_a_profile()
 
         self.generate()
 
         self.assertIn("hand_e_c12", self.names_text())
         self.assertNotIn("\n", self.names_text().replace("\r\n", ""))
-
-    def test_a_name_too_long_for_its_table_line_is_refused(self):
-        self.edit(self.json_path, '"name": "2f_85"', '"name": "' + "x" * 130 + '"')
-
-        self.assert_rejected(self.generate("--check"), "longer than 120 columns")
 
     def test_a_names_header_that_is_not_utf8_is_an_error_line(self):
         self.names_path.write_bytes(b"\xff\xfe")
