@@ -38,6 +38,7 @@
 #include <exception>
 #include <stdexcept>
 #include <thread>
+#include <utility>
 
 #include <Robotiq/common/serial_error.hpp>
 #include <Robotiq/common/serial_port.hpp>
@@ -271,18 +272,15 @@ static void parseSensors(UsbPacket *packet, Fingers *fingers)
 RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
                                            void (*dataCallback)(const Fingers&),
                                            unsigned int period_ms)
-    : m_running(false)
-    , m_connected(false)
-    , m_dataCallback(dataCallback)
+    : m_dataCallback(dataCallback)
     , m_period_ms(period_ms)
     , m_portName(portName)
     , m_receiveBuffer(1024)
-    , m_portLost(false)
     , m_dataRate(0)
     , m_calculatingBaseline(false)
-    , m_versionReady(false)
+    , m_state(State::Closed)
     , m_versionRequested(false)
-    , m_collecting(false)
+    , m_versionReady(false)
 {
     // The start command carries the period in one byte, where 0 stops.
     if (period_ms < 1 || period_ms > 255)
@@ -303,11 +301,7 @@ RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
     }
     m_port = std::move(port);
 
-    m_connected = true;
-    m_running = true;
-    m_collecting = true;
-
-    // Start data collection thread
+    m_state = State::Collecting;
     m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
 }
 
@@ -319,24 +313,21 @@ RobotiqTactileSensor::~RobotiqTactileSensor()
         std::terminate();
     }
 
-    // Signal thread to stop
-    m_running = false;
-
-    // Wait for thread to finish
+    stop();
     if (m_thread.joinable())
         m_thread.join();
 }
 
 bool RobotiqTactileSensor::isConnected() const
 {
-    return m_connected;
+    std::lock_guard<std::mutex> lk(m_mutex);
+    return m_state == State::Collecting || m_state == State::Stopped;
 }
 
 const char* RobotiqTactileSensor::getLastError() const
 {
-    if (m_portLost)
-        return m_portError.c_str();
-    return m_lastError.c_str();
+    std::lock_guard<std::mutex> lk(m_mutex);
+    return m_state == State::Lost ? m_lossCause.c_str() : m_lastError.c_str();
 }
 
 uint64_t RobotiqTactileSensor::getDataRate() const
@@ -346,7 +337,13 @@ uint64_t RobotiqTactileSensor::getDataRate() const
 
 void RobotiqTactileSensor::stop()
 {
-    m_running = false;
+    {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        if (m_state != State::Collecting)
+            return;
+        m_state = State::Stopped;
+    }
+    m_stateChanged.notify_all();
 }
 
 void RobotiqTactileSensor::start()
@@ -355,48 +352,47 @@ void RobotiqTactileSensor::start()
     if (m_thread.get_id() == std::this_thread::get_id())
         throw std::logic_error("start() called from the data callback");
 
-    if (m_running || !m_connected)
-        return;
-
+    {
+        std::lock_guard<std::mutex> lk(m_mutex);
+        if (m_state != State::Stopped)
+            return;
+    }
     // The old thread's stop command goes out before the new start command.
     // It can lose the sensor meanwhile.
     if (m_thread.joinable())
         m_thread.join();
-    if (!m_connected)
-        return;
     {
-        std::lock_guard<std::mutex> lk(m_versionMutex);
-        m_collecting = true;
+        std::lock_guard<std::mutex> lk(m_mutex);
+        if (m_state != State::Stopped)
+            return;
+        m_state = State::Collecting;
         m_versionRequested = false;
     }
-    m_running = true;
     m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
 }
 
 bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int timeout_ms)
 {
-    if (!m_connected)
+    std::unique_lock<std::mutex> lk(m_mutex);
+    if (m_state == State::Closed || m_state == State::Lost)
     {
         m_lastError = "Cannot query firmware version: sensor not connected";
         return false;
     }
-
-    if (!m_running)
+    if (m_state == State::Stopped)
     {
         m_lastError = "Cannot query firmware version: data collection is stopped";
         return false;
     }
-
-    std::unique_lock<std::mutex> lk(m_versionMutex);
 
     m_versionReady = false;
     m_versionError.clear();
     m_firmwareVersion.clear();
     m_versionRequested = true;
 
-    if (!m_versionCv.wait_for(lk,
-                              std::chrono::milliseconds(timeout_ms),
-                              [this] { return m_versionReady || !m_versionError.empty() || !m_collecting; }))
+    if (!m_stateChanged.wait_for(lk, std::chrono::milliseconds(timeout_ms), [this] {
+            return m_versionReady || !m_versionError.empty() || m_state != State::Collecting;
+        }))
     {
         m_lastError = "Timeout waiting for firmware version reply";
         return false;
@@ -412,11 +408,17 @@ bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int
     return false;
 }
 
+void RobotiqTactileSensor::setLastError(const std::string& error)
+{
+    std::lock_guard<std::mutex> lk(m_mutex);
+    m_lastError = error;
+}
+
 bool RobotiqTactileSensor::findBaseline(Fingers& baseline)
 {
-    if (!m_connected)
+    if (!isConnected())
     {
-        m_lastError = "Cannot calculate baseline: sensor not connected";
+        setLastError("Cannot calculate baseline: sensor not connected");
         return false;
     }
 
@@ -457,10 +459,10 @@ bool RobotiqTactileSensor::findBaseline(Fingers& baseline)
         }
 
         // Check if still connected
-        if (!m_connected)
+        if (!isConnected())
         {
             m_calculatingBaseline = false;
-            m_lastError = "Connection lost during baseline calculation";
+            setLastError("Connection lost during baseline calculation");
             return false;
         }
 
@@ -473,7 +475,7 @@ bool RobotiqTactileSensor::findBaseline(Fingers& baseline)
             snprintf(errBuf, sizeof(errBuf),
                     "Timeout during baseline calculation (collected %zu/1000 samples)",
                     sampleCount);
-            m_lastError = errBuf;
+            setLastError(errBuf);
             return false;
         }
     }
@@ -532,25 +534,23 @@ void RobotiqTactileSensor::threadLoop()
     }
 
     {
-        std::lock_guard<std::mutex> lk(m_versionMutex);
-        m_collecting = false;
+        std::lock_guard<std::mutex> lk(m_mutex);
         m_versionRequested = false;
     }
-    m_versionCv.notify_all();
+    m_stateChanged.notify_all();
 }
 
 void RobotiqTactileSensor::endCollection(const std::string& cause)
 {
     // Closed so a re-plugged sensor gets its name back.
     m_port->close();
-    if (!m_portLost)
-    {
-        m_portError = cause;
-        m_portLost = true;
-    }
     m_dataRate = 0;
-    m_connected = false;
-    m_running = false;
+    std::lock_guard<std::mutex> lk(m_mutex);
+    if (m_state != State::Lost)
+    {
+        m_lossCause = cause;
+        m_state = State::Lost;
+    }
 }
 
 void RobotiqTactileSensor::collectData()
@@ -573,9 +573,16 @@ void RobotiqTactileSensor::collectData()
         throw Robotiq::common::SerialError("the sensor did not take the start command");
 
     uint8_t* buffer = reinterpret_cast<uint8_t*>(m_receiveBuffer.data());
-    while (m_running)
+    while (true)
     {
-        if (m_versionRequested.exchange(false))
+        bool versionRequested = false;
+        {
+            std::lock_guard<std::mutex> lk(m_mutex);
+            if (m_state != State::Collecting)
+                break;
+            std::swap(versionRequested, m_versionRequested);
+        }
+        if (versionRequested)
             sendVersionRequest();
 
         int64_t available = static_cast<int64_t>(m_port->readSome(
@@ -603,13 +610,13 @@ void RobotiqTactileSensor::collectData()
                 if (recv.command == USB_COMMAND_GET_VERSION)
                 {
                     {
-                        std::lock_guard<std::mutex> lk(m_versionMutex);
+                        std::lock_guard<std::mutex> lk(m_mutex);
                         m_firmwareVersion.assign(
                             reinterpret_cast<const char *>(recv.data),
                             recv.data_length);
                         m_versionReady = true;
                     }
-                    m_versionCv.notify_all();
+                    m_stateChanged.notify_all();
                     continue;
                 }
 
@@ -672,8 +679,8 @@ void RobotiqTactileSensor::sendVersionRequest()
     if (usbSend(*m_port, USB_COMMAND_GET_VERSION))
         return;
     {
-        std::lock_guard<std::mutex> lk(m_versionMutex);
+        std::lock_guard<std::mutex> lk(m_mutex);
         m_versionError = "Failed to send GET_VERSION command";
     }
-    m_versionCv.notify_all();
+    m_stateChanged.notify_all();
 }

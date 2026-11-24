@@ -143,6 +143,8 @@ private:
     // Closes the port and disconnects; the first cause is kept.
     void endCollection(const std::string& cause);
 
+    void setLastError(const std::string& error);
+
     void sendVersionRequest();
 
     // A Robotiq::common::SerialPort, whose versioned namespace stays out of
@@ -153,10 +155,7 @@ private:
     // the port: the serial transport is not thread-safe.
     std::unique_ptr<Port> m_port;
 
-    // Threading
     std::thread m_thread;
-    std::atomic<bool> m_running;
-    std::atomic<bool> m_connected;
 
     // Callback
     void (*m_dataCallback)(const Fingers&);
@@ -168,12 +167,6 @@ private:
     // Buffers
     std::vector<char> m_receiveBuffer;
 
-    // m_lastError belongs to the user's thread. The read thread writes
-    // m_portError once, then sets m_portLost.
-    std::string m_lastError;
-    std::string m_portError;
-    std::atomic<bool> m_portLost;
-
     // Data rate tracking
     std::atomic<uint64_t> m_dataRate;
 
@@ -182,15 +175,26 @@ private:
     std::vector<Fingers> m_baselineSamples;
     std::mutex m_baselineMutex;
 
-    // Version handoff with the read thread. m_versionMutex guards the fields
-    // below, except m_versionRequested.
-    std::mutex m_versionMutex;
-    std::condition_variable m_versionCv;
+    // Closed: the open failed. Stopped: by stop(), still connected. Lost:
+    // the read thread failed; m_lossCause says why.
+    enum class State
+    {
+        Closed,
+        Collecting,
+        Stopped,
+        Lost
+    };
+
+    // Guards the fields below, shared with the read thread.
+    mutable std::mutex m_mutex;
+    std::condition_variable m_stateChanged;
+    State m_state;
+    std::string m_lastError;
+    std::string m_lossCause;
+    bool m_versionRequested;
+    bool m_versionReady;
     std::string m_firmwareVersion;
     std::string m_versionError;
-    bool m_versionReady;
-    std::atomic<bool> m_versionRequested;
-    bool m_collecting;
 
     // Prevent copying
     RobotiqTactileSensor(const RobotiqTactileSensor&) = delete;
