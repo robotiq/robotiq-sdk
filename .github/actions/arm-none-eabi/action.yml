@@ -1,0 +1,50 @@
+name: arm-none-eabi toolchain
+description: Installs Ubuntu's gcc-arm-none-eabi, its packages cached between runs.
+
+inputs:
+  extra-packages:
+    description: More apt packages to install with it.
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    # Keyed on the toolchain's package versions, not the runner image: two
+    # images are live during a rollout, and both download the same files.
+    # Only file names, sizes and hashes count; the mirror differs per runner.
+    - id: key
+      shell: bash
+      run: |
+        sudo apt-get update
+        packages=$(apt-get install --print-uris -qq gcc-arm-none-eabi | awk '{print $2, $3, $4}')
+        echo "key=apt-arm-none-eabi-$(echo "$packages" | sha256sum | cut -c1-16)" >> "$GITHUB_OUTPUT"
+    # About 600 MB, which some runners' mirrors serve at 150 KB/s.
+    - id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/apt-archives
+        key: ${{ steps.key.outputs.key }}
+        restore-keys: apt-arm-none-eabi-
+    - id: install
+      shell: bash
+      env:
+        EXTRA_PACKAGES: ${{ inputs.extra-packages }}
+      run: |
+        mkdir -p ~/apt-archives/partial
+        sudo apt-get install -y -o Dir::Cache::Archives="$HOME/apt-archives" gcc-arm-none-eabi $EXTRA_PACKAGES
+        sudo apt-get autoclean -o Dir::Cache::Archives="$HOME/apt-archives"
+    - if: always() && steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: sudo chown -R "$USER" ~/apt-archives
+    - if: steps.install.outcome == 'success' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/apt-archives
+        key: ${{ steps.key.outputs.key }}
+    # A download cut short by the job timeout: apt resumes it from partial/.
+    # Never under the full key, which a complete archive must still claim.
+    - if: always() && steps.install.outcome != 'success' && steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/apt-archives
+        key: ${{ steps.key.outputs.key }}-partial-${{ github.run_id }}
