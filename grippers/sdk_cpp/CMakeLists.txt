@@ -10,6 +10,9 @@ endif()
 
 project(grippers VERSION ${ROBOTIQ_SDK_VERSION} LANGUAGES C CXX)
 
+# No existence check: the RobotiqSdkVersion.cmake one above covers cmake/.
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/RobotiqCommon.cmake")
+
 if(NOT DEFINED CMAKE_CXX_STANDARD)
    set(CMAKE_CXX_STANDARD 17)
 endif()
@@ -64,24 +67,10 @@ endif()
 
 # --- warnings -----------------------------------------------------------
 # Every C++ target this project compiles links this privately: the library, the
-# tests and the examples. It is not exported, so consumers of the installed SDK
-# never see it. Vendored C (third_party/) keeps its own warning state.
-#
-# MSVC reads -Wall as /Wall — every informational warning, unbuildable under
-# /WX — so the flags are per-compiler. /utf-8 because the sources carry UTF-8
-# in string literals and MSVC otherwise reads them in the system codepage.
-add_library(grippers_warnings INTERFACE)
-if(MSVC)
-  set(GRIPPERS_WARNING_FLAGS /W4 /permissive- /utf-8)
-  set(GRIPPERS_WARNING_ERROR_FLAG /WX)
-else()
-  set(GRIPPERS_WARNING_FLAGS -Wall -Wextra)
-  set(GRIPPERS_WARNING_ERROR_FLAG -Werror)
-endif()
-target_compile_options(grippers_warnings INTERFACE
-  $<$<COMPILE_LANGUAGE:CXX>:${GRIPPERS_WARNING_FLAGS}>
-  $<$<AND:$<COMPILE_LANGUAGE:CXX>,$<BOOL:${GRIPPERS_WARNINGS_AS_ERRORS}>>:${GRIPPERS_WARNING_ERROR_FLAG}>
-)
+# tests and the examples. Vendored C (third_party/) keeps its own warning
+# state.
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/RobotiqWarnings.cmake")
+robotiq_add_warnings_target(grippers_warnings AS_ERRORS ${GRIPPERS_WARNINGS_AS_ERRORS})
 
 # --- SDK library --------------------------------------------------------
 # The SDK is one set of sources published in three pieces: grippers_usage holds
@@ -266,6 +255,8 @@ if(GRIPPERS_TOP_LEVEL)
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/tests/*.hpp
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/*.cpp
+    ${ROBOTIQ_SDK_ROOT}/common/*.cpp
+    ${ROBOTIQ_SDK_ROOT}/common/*.hpp
   )
   if(Python3_Interpreter_FOUND)
     add_custom_target(update_device_profiles

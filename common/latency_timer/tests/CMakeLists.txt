@@ -1,0 +1,4 @@
+add_executable(robotiq_common_latency_timer_tests test_latency_timer.cpp)
+robotiq_link_common(robotiq_common_latency_timer_tests latency_timer)
+target_link_libraries(robotiq_common_latency_timer_tests PRIVATE GTest::gtest_main robotiq_common_warnings)
+gtest_discover_tests(robotiq_common_latency_timer_tests)

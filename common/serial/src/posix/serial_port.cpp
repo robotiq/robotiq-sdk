@@ -6,7 +6,7 @@
 // non-blocking descriptor plus poll() for the timeouts. Linux and macOS
 // share it; the few places they differ are marked.
 
-#include "detail/serial_port.hpp"
+#include <Robotiq/common/serial_port.hpp>
 
 #include <fcntl.h>
 #include <poll.h>
@@ -22,9 +22,10 @@
 #include <system_error>
 #include <thread>
 
-#include <Robotiq/gripper/serial_io_exception.hpp>
+#include <Robotiq/common/serial_error.hpp>
 
-namespace Robotiq::detail {
+namespace Robotiq::common {
+inline namespace ROBOTIQ_COMMON_ABI {
 namespace {
 using std::chrono::milliseconds;
 using std::chrono::steady_clock;
@@ -42,13 +43,13 @@ std::string describe(int error)
 
 [[noreturn]] void fail(const std::string& context, int error)
 {
-   throw SerialIOException(context + ": " + describe(error));
+   throw SerialError(context + ": " + describe(error));
 }
 
 // The termios constant for \p baudrate, or 0 when the platform has none.
 // Only the rates the constants cover are offered: the raw-speed escapes
 // (Linux BOTHER, macOS IOSSIOSPEED) are per-platform ioctls, and no
-// Robotiq gripper runs outside this table.
+// Robotiq device runs outside this table.
 speed_t baudConstant(uint32_t baudrate)
 {
    switch(baudrate)
@@ -92,13 +93,13 @@ speed_t baudConstant(uint32_t baudrate)
    }
 }
 
-// The wire format of the gripper's Modbus RTU link, on a raw terminal.
+// The wire format of the Robotiq devices' serial links, on a raw terminal.
 void configure(int fd, uint32_t baudrate)
 {
    const speed_t speed = baudConstant(baudrate);
    if(speed == 0)
    {
-      throw SerialIOException("unsupported baud rate " + std::to_string(baudrate));
+      throw SerialError("unsupported baud rate " + std::to_string(baudrate));
    }
 
    struct termios tty = {};
@@ -108,7 +109,7 @@ void configure(int fd, uint32_t baudrate)
    }
 
    // No line editing, echo, signal characters, software flow control or
-   // byte translation: any of them would alter a binary Modbus frame.
+   // byte translation: any of them would alter a binary frame.
    // glibc's cfmakeraw() leaves the input flags below set.
    ::cfmakeraw(&tty);
    tty.c_iflag &= ~static_cast<tcflag_t>(IXOFF | IXANY | INPCK);
@@ -124,7 +125,7 @@ void configure(int fd, uint32_t baudrate)
    tty.c_cflag |= static_cast<tcflag_t>(CREAD | CLOCAL);
    // read() returns at once with whatever is buffered. The non-blocking
    // descriptor plus poll() in read() do the waiting, the only way to
-   // express the zero-timeout drain the Serial contract requires.
+   // express a zero-timeout read that takes only what is buffered.
    tty.c_cc[VMIN] = 0;
    tty.c_cc[VTIME] = 0;
 
@@ -140,8 +141,8 @@ void configure(int fd, uint32_t baudrate)
 
 // Both are conveniences rather than requirements of the link, and a
 // pseudo-terminal supports neither, so failure is not an error:
-// TIOCEXCL keeps a second process off the gripper, and clearing
-// RTS/DTR matches what the port carried before this rewrite.
+// TIOCEXCL keeps a second process off the device, and RTS/DTR start
+// cleared, so no device sees a modem line the SDK never drives.
 void applyLineDefaults(int fd)
 {
 #ifdef TIOCEXCL
@@ -155,7 +156,7 @@ void applyLineDefaults(int fd)
 
 [[noreturn]] void failHungUp(const std::string& context)
 {
-   throw SerialIOException(context + ": the other end hung up");
+   throw SerialError(context + ": the other end hung up");
 }
 
 enum class WaitResult
@@ -215,7 +216,7 @@ void SerialPort::open(const std::string& port, uint32_t baudrate)
       const int error = errno;
       if(error == ENOENT || error == ENODEV || error == ENXIO)
       {
-         throw SerialIOException("no serial port named '" + port + "' (is the device connected?)");
+         throw SerialError("no serial port named '" + port + "' (is the device connected?)");
       }
       fail("opening serial port '" + port + "'", error);
    }
@@ -357,4 +358,5 @@ bool SerialPort::drain(milliseconds timeout)
    }
    return true;
 }
-} // namespace Robotiq::detail
+} // namespace ROBOTIQ_COMMON_ABI
+} // namespace Robotiq::common

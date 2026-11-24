@@ -13,18 +13,11 @@
 #include <Robotiq/gripper/serial_io_exception.hpp>
 
 #ifndef _WIN32
-#include <fcntl.h>
-#include <poll.h>
-#include <stdlib.h>
-#include <unistd.h>
-
-#include <cerrno>
-#include <filesystem>
-#include <fstream>
 #include <future>
 #include <string>
-#include <thread>
 #include <vector>
+
+#include <Robotiq/common/serial_testing/pty_peer.hpp>
 #endif
 
 namespace Robotiq::test {
@@ -47,7 +40,9 @@ TEST(TestDefaultSerial, throws_when_port_does_not_exist)
    config.port = "/dev/this_should_not_exist";
 #endif
    auto serial = makeSerial(config);
-   EXPECT_THROW(serial.open(), SerialIOException);
+   EXPECT_THAT([&] { serial.open(); },
+               ::testing::ThrowsMessage<SerialIOException>(::testing::StrEq(
+                  "SerialIOException: no serial port named '" + config.port + "' (is the device connected?)")));
    EXPECT_FALSE(serial.isOpen());
 }
 
@@ -89,153 +84,24 @@ TEST(TestDefaultSerial, construction_config_round_trip)
 }
 
 #ifndef _WIN32
-#ifdef __linux__
-class LatencyTimerPath : public ::testing::Test
-{
-protected:
-   void SetUp() override
-   {
-      std::string base = ::testing::TempDir() + "latency_timer_XXXXXX";
-      ASSERT_NE(::mkdtemp(base.data()), nullptr);
-      _root = base;
-      std::filesystem::create_directories(_root / "dev");
-      std::filesystem::create_directories(_root / "sysfs/ttyUSB7");
-      std::ofstream(_root / "dev/ttyUSB7").put('\0');
-      std::ofstream(_root / "dev/ttyACM0").put('\0');
-      std::ofstream(_root / "sysfs/ttyUSB7/latency_timer") << 16;
-   }
-
-   void TearDown() override { std::filesystem::remove_all(_root); }
-
-   [[nodiscard]] std::string lookup(const std::filesystem::path& port) const
-   {
-      return detail::latencyTimerPath(port.string(), (_root / "sysfs").string());
-   }
-
-   std::filesystem::path _root;
-};
-
-TEST_F(LatencyTimerPath, FindsTheAttributeOfAnFtdiNode)
-{
-   EXPECT_EQ(lookup(_root / "dev/ttyUSB7"), (_root / "sysfs/ttyUSB7/latency_timer").string());
-}
-
-TEST_F(LatencyTimerPath, FollowsSymlinksToTheDeviceNode)
-{
-   std::filesystem::create_directories(_root / "dev/serial/by-id");
-   std::filesystem::create_symlink(_root / "dev/ttyUSB7", _root / "dev/serial/by-id/usb-FTDI_X-if00-port0");
-
-   EXPECT_EQ(lookup(_root / "dev/serial/by-id/usb-FTDI_X-if00-port0"),
-             (_root / "sysfs/ttyUSB7/latency_timer").string());
-}
-
-TEST_F(LatencyTimerPath, IsEmptyForANodeWithoutTheAttribute)
-{
-   EXPECT_EQ(lookup(_root / "dev/ttyACM0"), "");
-}
-
-TEST_F(LatencyTimerPath, IsEmptyForAMissingPort)
-{
-   EXPECT_EQ(lookup(_root / "dev/ttyUSB9"), "");
-}
-#endif
 
 using namespace std::chrono_literals;
-using ::testing::ElementsAre;
-using ::testing::IsEmpty;
 
 namespace {
-// A pseudo-terminal pair standing in for the gripper's serial link: the
-// slave is a real tty, so DefaultSerial drives it through the same
-// termios path as an FTDI adapter, and the master is the peer that
-// answers.
-class PtyLoopback
+class PtyLoopback : public common::serial_testing::PtyPeer
 {
 public:
-   PtyLoopback()
-   {
-      _master = ::posix_openpt(O_RDWR | O_NOCTTY);
-      if(_master < 0 || ::grantpt(_master) != 0 || ::unlockpt(_master) != 0)
-      {
-         return;
-      }
-      const char* name = ::ptsname(_master);
-      if(name != nullptr)
-      {
-         _slavePath = name;
-      }
-   }
-
-   ~PtyLoopback()
-   {
-      if(_master >= 0)
-      {
-         ::close(_master);
-      }
-   }
-
-   PtyLoopback(const PtyLoopback&) = delete;
-   PtyLoopback& operator=(const PtyLoopback&) = delete;
-
-   [[nodiscard]] bool valid() const { return _master >= 0 && !_slavePath.empty(); }
-   [[nodiscard]] const std::string& slavePath() const { return _slavePath; }
-
    // An open DefaultSerial on the slave end.
    [[nodiscard]] std::unique_ptr<DefaultSerial> openSerial(
       std::chrono::milliseconds timeout = SerialConfig{}.timeout) const
    {
       SerialConfig config;
-      config.port = _slavePath;
+      config.port = slavePath();
       config.timeout = timeout;
       auto serial = std::make_unique<DefaultSerial>(std::move(config), std::make_shared<NullLogger>());
       serial->open();
       return serial;
    }
-
-   void hangUp()
-   {
-      ::close(_master);
-      _master = -1;
-   }
-
-   void send(const std::vector<uint8_t>& data) const
-   {
-      EXPECT_EQ(::write(_master, data.data(), data.size()), static_cast<ssize_t>(data.size()));
-   }
-
-   // Up to size bytes from the peer's end. The deadline is a guard
-   // against hanging a failing test, not a behaviour under test.
-   [[nodiscard]] std::vector<uint8_t> receive(size_t size) const
-   {
-      std::vector<uint8_t> data(size);
-      size_t received = 0;
-      const auto deadline = std::chrono::steady_clock::now() + 2s;
-      while(received < size && std::chrono::steady_clock::now() < deadline)
-      {
-         struct pollfd descriptor = {};
-         descriptor.fd = _master;
-         descriptor.events = POLLIN;
-         if(::poll(&descriptor, 1, 100) <= 0)
-         {
-            continue;
-         }
-         const ssize_t count = ::read(_master, data.data() + received, size - received);
-         if(count > 0)
-         {
-            received += static_cast<size_t>(count);
-         }
-         else if(count < 0 && errno != EAGAIN && errno != EINTR)
-         {
-            break;
-         }
-      }
-      data.resize(received);
-      return data;
-   }
-
-private:
-   int _master = -1;
-   std::string _slavePath;
 };
 
 class PtySerialTest : public ::testing::Test
@@ -275,7 +141,7 @@ TEST_F(PtySerialTest, opening_an_already_open_port_is_ignored)
 TEST_F(PtySerialTest, write_reaches_the_peer)
 {
    const std::vector<uint8_t> request = {0x09, 0x03, 0x07, 0xD0, 0x00, 0x03};
-   const auto serial = _pty.openSerial();
+   const auto serial = _pty.openSerial(10s);
    // write() waits for the output to drain, which on macOS a pty does only
    // once the peer has read it, so the peer must already be reading.
    auto received = std::async(std::launch::async, [&] { return _pty.receive(request.size()); });
@@ -290,7 +156,8 @@ TEST_F(PtySerialTest, write_times_out_when_the_peer_never_reads)
 {
    const auto serial = _pty.openSerial(20ms);
 
-   EXPECT_THROW(serial->write({0x09, 0x03, 0x07, 0xD0, 0x00, 0x03}), SerialIOException);
+   EXPECT_THAT([&] { serial->write({0x09, 0x03, 0x07, 0xD0, 0x00, 0x03}); },
+               ::testing::ThrowsMessage<SerialIOException>(::testing::HasSubstr("did not drain")));
 }
 #endif
 
@@ -298,64 +165,40 @@ TEST_F(PtySerialTest, read_waits_for_the_requested_bytes)
 {
    const std::vector<uint8_t> response = {0x09, 0x03, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00};
    const auto serial = _pty.openSerial();
-   _pty.send(response);
+   ASSERT_TRUE(_pty.send(response));
 
    EXPECT_EQ(serial->read(response.size(), 500ms), response);
 }
 
-TEST_F(PtySerialTest, read_raises_when_the_peer_hangs_up)
+TEST_F(PtySerialTest, a_read_error_is_a_serial_io_exception)
 {
    const auto serial = _pty.openSerial();
    _pty.hangUp();
 
-   EXPECT_THROW((void)serial->read(1, 500ms), SerialIOException);
+   EXPECT_THAT([&] { (void)serial->read(1, 500ms); },
+               ::testing::ThrowsMessage<SerialIOException>(
+                  ::testing::AnyOf(::testing::HasSubstr("waiting for serial input"),
+                                   ::testing::HasSubstr("reading from the serial port"))));
 }
 
-TEST_F(PtySerialTest, read_waits_for_bytes_that_have_not_arrived_yet)
+TEST_F(PtySerialTest, a_write_error_is_a_serial_io_exception)
 {
    const auto serial = _pty.openSerial();
+   _pty.hangUp();
 
-   // The tail of each frame is sent only once the read is under way, so
-   // the read has to wait for it rather than settle for what was already
-   // buffered. Repeated because the behaviour under test is what happens
-   // at the moment the port runs dry mid-frame, and a single round could
-   // miss it by having the peer get there first.
-   for(int round = 0; round < 32; ++round)
-   {
-      _pty.send({0x09, 0x03});
-      std::thread tail([this] { _pty.send({0x06, 0x11}); });
-      const auto frame = serial->read(4, 2s);
-      tail.join();
-
-      ASSERT_THAT(frame, ElementsAre(0x09, 0x03, 0x06, 0x11));
-   }
+   EXPECT_THAT([&] { serial->write({0x09, 0x03, 0x07, 0xD0, 0x00, 0x03}); },
+               ::testing::ThrowsMessage<SerialIOException>(
+                  ::testing::AnyOf(::testing::HasSubstr("writing to the serial port"),
+                                   ::testing::HasSubstr("waiting to send on the serial port"))));
 }
 
-TEST_F(PtySerialTest, a_zero_timeout_read_takes_only_what_is_buffered)
+TEST_F(PtySerialTest, a_short_write_is_a_timeout)
 {
-   const auto serial = _pty.openSerial();
-   _pty.send({0xAA, 0xBB, 0xCC});
+   // Far more than a pty buffers, with no one reading the other end.
+   const auto serial = _pty.openSerial(20ms);
 
-   // The pty delivers the whole chunk to the slave's queue at once, so
-   // this blocking byte also settles the two behind it.
-   ASSERT_THAT(serial->read(1, 500ms), ElementsAre(0xAA));
-
-   // Asks for far more than is buffered: it must return the rest
-   // instead of waiting for the full count.
-   EXPECT_THAT(serial->read(64, 0ms), ElementsAre(0xBB, 0xCC));
-   EXPECT_THAT(serial->read(64, 0ms), IsEmpty());
-}
-
-TEST_F(PtySerialTest, open_rejects_a_baud_rate_the_platform_has_no_constant_for)
-{
-   SerialConfig config;
-   config.port = _pty.slavePath();
-   config.baudrate = 12345;
-   config.latencyTimerMs = 0;
-   auto serial = makeSerial(config);
-
-   EXPECT_THROW(serial.open(), SerialIOException);
-   EXPECT_FALSE(serial.isOpen());
+   EXPECT_THAT([&] { serial->write(std::vector<uint8_t>(1 << 20, 0x55)); },
+               ::testing::ThrowsMessage<SerialIOException>(::testing::HasSubstr("wrote")));
 }
 #endif
 

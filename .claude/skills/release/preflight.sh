@@ -69,5 +69,5 @@ if [ "${1:-}" = "--full-diff" ]; then
 fi
 
 echo; echo "== Build/CI inputs changed since $last (no header lines, but can break users) =="
-git diff --stat "$last" origin/main -- VERSION cmake grippers/sdk_cpp/CMakeLists.txt tsf/sdk_cpp/CMakeLists.txt \
+git diff --stat "$last" origin/main -- VERSION cmake common grippers/sdk_cpp/CMakeLists.txt tsf/sdk_cpp/CMakeLists.txt \
   tsf/sensor_quickstart/requirements.txt .github || true

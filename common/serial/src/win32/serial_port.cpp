@@ -5,7 +5,7 @@
 // The Windows half of SerialPort: a comm handle configured through a DCB,
 // with COMMTIMEOUTS doing the waiting that poll() does on POSIX.
 
-#include "detail/serial_port.hpp"
+#include <Robotiq/common/serial_port.hpp>
 
 #define WIN32_LEAN_AND_MEAN
 // Recent toolchains predefine NOMINMAX; redefining it is a warning, fatal
@@ -24,15 +24,16 @@
 #include <string>
 #include <system_error>
 
-#include <Robotiq/gripper/serial_io_exception.hpp>
+#include <Robotiq/common/serial_error.hpp>
 
-namespace Robotiq::detail {
+namespace Robotiq::common {
+inline namespace ROBOTIQ_COMMON_ABI {
 namespace {
 using std::chrono::milliseconds;
 
 [[noreturn]] void fail(const std::string& context, DWORD error)
 {
-   throw SerialIOException(context + ": " + std::system_category().message(static_cast<int>(error)));
+   throw SerialError(context + ": " + std::system_category().message(static_cast<int>(error)));
 }
 
 // "COM10" and above only resolve through the device namespace, and the
@@ -49,7 +50,7 @@ std::string devicePath(const std::string& port)
 }
 
 // 8N1, no flow control, no line handling: the wire format of the
-// gripper's Modbus RTU link. RTS and DTR are left deasserted.
+// Robotiq devices' serial links. RTS and DTR are left deasserted.
 void configure(HANDLE handle, uint32_t baudrate)
 {
    DCB dcb = {};
@@ -92,7 +93,7 @@ SerialPort::~SerialPort()
 
 void SerialPort::open(const std::string& port, uint32_t baudrate)
 {
-   // No sharing: a second opener of the same gripper is a bug, and the
+   // No sharing: a second opener of the same device is a bug, and the
    // driver enforcing it beats two processes interleaving frames.
    const HANDLE handle =
       ::CreateFileA(devicePath(port).c_str(), GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_EXISTING, 0, nullptr);
@@ -101,7 +102,7 @@ void SerialPort::open(const std::string& port, uint32_t baudrate)
       const DWORD error = ::GetLastError();
       if(error == ERROR_FILE_NOT_FOUND || error == ERROR_PATH_NOT_FOUND)
       {
-         throw SerialIOException("no serial port named '" + port + "' (is the device connected?)");
+         throw SerialError("no serial port named '" + port + "' (is the device connected?)");
       }
       fail("opening serial port '" + port + "'", error);
    }
@@ -142,8 +143,8 @@ void SerialPort::setTimeouts(int64_t readMs, int64_t writeMs)
    COMMTIMEOUTS timeouts = {};
    if(readMs == 0)
    {
-      // Documented as "return immediately with whatever is buffered" —
-      // the zero-timeout drain the Serial contract requires.
+      // Documented as "return immediately with whatever is buffered": a
+      // zero-timeout read.
       timeouts.ReadIntervalTimeout = MAXDWORD;
    }
    else
@@ -201,4 +202,5 @@ bool SerialPort::drain(milliseconds /*timeout*/)
    }
    return true;
 }
-} // namespace Robotiq::detail
+} // namespace ROBOTIQ_COMMON_ABI
+} // namespace Robotiq::common
