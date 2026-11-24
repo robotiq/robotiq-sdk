@@ -28,6 +28,7 @@ jobs:
   # everything OS-flavored sits behind the injected Platform.
   cortex-m55:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       CXXFLAGS: -std=c++17 -Isdk_cpp/include -Isdk_cpp/third_party/nanomodbus
                 -mcpu=cortex-m55 -mthumb -fexceptions -Wall -Wextra -Werror
@@ -35,7 +36,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install the arm-none-eabi toolchain
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi
+        uses: ./.github/actions/arm-none-eabi
 
       - name: Compile the core
         run: |
@@ -62,6 +63,7 @@ jobs:
   # signing and flashing a real image stay out of CI.
   threadx-link:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     env:
       # ubuntu-24.04 ships gcc-arm-none-eabi 13.2; 22.04's 10.3 is too old for
       # the cortex-m55 flags.
@@ -74,7 +76,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install the arm-none-eabi toolchain
-        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi ninja-build
+        uses: ./.github/actions/arm-none-eabi
+        with:
+          extra-packages: ninja-build
 
       - name: Build ThreadX for cortex-m55
         run: |
@@ -158,6 +162,7 @@ jobs:
   # so ctest here runs only the device profiles checks.
   freestanding-cmake:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Configure and build the library with the hosted pieces off
@@ -177,6 +182,7 @@ jobs:
   # The default build, installed, then linked by a consumer.
   install-consumer:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Build and install the library
@@ -194,6 +200,7 @@ jobs:
   # silently here.
   device-profiles:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Check the committed headers against the data file
@@ -206,6 +213,7 @@ jobs:
 
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: clang-format check
@@ -219,6 +227,7 @@ jobs:
 
   api-docs:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Install Doxygen
@@ -235,6 +244,7 @@ jobs:
   # sdk_cpp/tools/check_doc_snippets.py for the convention.
   doc-snippets:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Check markdown code fences against their tagged source
@@ -242,6 +252,7 @@ jobs:
 
   coverage:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: Install dependencies
@@ -288,6 +299,7 @@ jobs:
     if: always()
     needs: [build-and-test, cortex-m55, threadx-link, freestanding-cmake, install-consumer, device-profiles, format, coverage, api-docs, doc-snippets]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:

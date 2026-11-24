@@ -27,6 +27,7 @@ jobs:
 
   format:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - name: clang-format check
@@ -37,6 +38,7 @@ jobs:
     if: always()
     needs: [tests, dev-aggregate, format]
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
