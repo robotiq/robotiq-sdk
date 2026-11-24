@@ -279,6 +279,8 @@ size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout, ReadMo
       if(count > 0)
       {
          received += static_cast<size_t>(count);
+         // A 0 after this read is an empty buffer, not a hang-up.
+         polledReadable = false;
          if(mode == ReadMode::Some)
          {
             break;
