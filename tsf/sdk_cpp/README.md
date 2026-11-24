@@ -99,7 +99,9 @@ On Windows, which has no pseudo-terminals, only the tests that need none run.
 class RobotiqTactileSensor
 {
 public:
-    // Constructor: Opens port and starts data collection
+    // Constructor: Opens port and starts data collection. period_ms is 1 to
+    // 255; outside that range the port is not opened. The callback runs on
+    // the read thread; an exception it throws ends collection.
     RobotiqTactileSensor(const char* portName,
                          void (*dataCallback)(const Fingers&),
                          unsigned int period_ms = 1);
@@ -108,10 +110,11 @@ public:
     ~RobotiqTactileSensor();
 
     // False when the port could not be opened, or once the sensor is lost
-    // at runtime (unplugged, port error), which also stops data collection
+    // at runtime (unplugged, port error) or the callback threw, which also
+    // stops data collection
     bool isConnected() const;
 
-    // Get last error message; after a runtime loss, the port failure
+    // Get last error message; after a runtime loss, its cause
     const char* getLastError() const;
 
     // Get current data rate (bytes/sec)

@@ -35,6 +35,8 @@
 #include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <exception>
+#include <stdexcept>
 #include <thread>
 
 #include <Robotiq/common/serial_error.hpp>
@@ -112,7 +114,7 @@ static const std::chrono::milliseconds USB_WRITE_TIMEOUT(100);
 // Only sets how soon the read thread notices stop() and a version request.
 static const std::chrono::milliseconds USB_READ_TIMEOUT(1);
 
-// False on a timeout. On Windows the drain (FlushFileBuffers) has no bound.
+// False on a timeout.
 static bool usbSend(Robotiq::common::SerialPort& port, uint8_t command,
                     const uint8_t *payload = nullptr, uint8_t length = 0)
 {
@@ -128,7 +130,13 @@ static bool usbSend(Robotiq::common::SerialPort& port, uint8_t command,
 
     const size_t size = packet.data_length + USB_PACKET_HEADER_SIZE;
     const size_t sent = port.write(p, size, USB_WRITE_TIMEOUT);
+#ifdef _WIN32
+    // FlushFileBuffers() has no bound: a sensor that stops reading would
+    // hang the read thread. WriteFile() already obeys USB_WRITE_TIMEOUT.
+    return sent == size;
+#else
     return sent == size && port.drain(USB_WRITE_TIMEOUT);
+#endif
 }
 
 static bool usbReadByte(UsbPacket *packet, unsigned int *readSoFar, uint8_t d)
@@ -276,6 +284,13 @@ RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
     , m_versionRequested(false)
     , m_collecting(false)
 {
+    // The start command carries the period in one byte, where 0 stops.
+    if (period_ms < 1 || period_ms > 255)
+    {
+        m_lastError = "Sampling period must be 1 to 255 ms, got " + std::to_string(period_ms);
+        return;
+    }
+
     auto port = std::make_unique<Port>();
     try
     {
@@ -298,6 +313,12 @@ RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
 
 RobotiqTactileSensor::~RobotiqTactileSensor()
 {
+    if (m_thread.get_id() == std::this_thread::get_id())
+    {
+        std::fputs("RobotiqTactileSensor: deleted from its own data callback\n", stderr);
+        std::terminate();
+    }
+
     // Signal thread to stop
     m_running = false;
 
@@ -330,6 +351,10 @@ void RobotiqTactileSensor::stop()
 
 void RobotiqTactileSensor::start()
 {
+    // Ends collection, through threadLoop(): the thread cannot join itself.
+    if (m_thread.get_id() == std::this_thread::get_id())
+        throw std::logic_error("start() called from the data callback");
+
     if (m_running || !m_connected)
         return;
 
@@ -494,16 +519,16 @@ void RobotiqTactileSensor::threadLoop()
     }
     catch (const Robotiq::common::SerialError& error)
     {
-        // Closed so a re-plugged sensor gets its name back.
-        m_port->close();
-        if (!m_portLost)
-        {
-            m_portError = std::string("Connection lost: ") + error.what();
-            m_portLost = true;
-        }
-        m_dataRate = 0;
-        m_connected = false;
-        m_running = false;
+        endCollection(std::string("Connection lost: ") + error.what());
+    }
+    // From the data callback, or out of memory.
+    catch (const std::exception& error)
+    {
+        endCollection(std::string("Data collection stopped: ") + error.what());
+    }
+    catch (...)
+    {
+        endCollection("Data collection stopped: unknown exception");
     }
 
     {
@@ -512,6 +537,20 @@ void RobotiqTactileSensor::threadLoop()
         m_versionRequested = false;
     }
     m_versionCv.notify_all();
+}
+
+void RobotiqTactileSensor::endCollection(const std::string& cause)
+{
+    // Closed so a re-plugged sensor gets its name back.
+    m_port->close();
+    if (!m_portLost)
+    {
+        m_portError = cause;
+        m_portLost = true;
+    }
+    m_dataRate = 0;
+    m_connected = false;
+    m_running = false;
 }
 
 void RobotiqTactileSensor::collectData()
