@@ -18,18 +18,13 @@ defaults:
     working-directory: tsf
 
 jobs:
-  # The C++ SDK in Release. Quick_start and the two test programs need a
-  # sensor to run, so this job builds them and stops there.
+  # The example programs need a sensor. Windows has no pseudo-terminal, so
+  # it runs only the unit tests that need none.
   sdk-cpp:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install libserialport
-        run: sudo apt-get update && sudo apt-get install -y libserialport-dev
-      - name: Configure and build
-        run: |
-          cmake -S sdk_cpp -B build -DCMAKE_BUILD_TYPE=Release
-          cmake --build build --config Release -j 4
+    uses: ./.github/workflows/cmake-tests.yml
+    with:
+      source: tsf/sdk_cpp
+      cmake-args: -DTSF_BUILD_TESTS=ON
 
   # The Python tools on the oldest Python the launchers accept and on a
   # current one, on the three systems the launchers target (.sh, _mac.sh,

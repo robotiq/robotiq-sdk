@@ -8,6 +8,8 @@
 
 #include <Robotiq/common/serial_port.hpp>
 
+#include "../drain_wait.hpp"
+
 #include <fcntl.h>
 #include <poll.h>
 #include <sys/ioctl.h>
@@ -225,6 +227,11 @@ void SerialPort::open(const std::string& port, uint32_t baudrate)
    {
       configure(fd, baudrate);
    }
+   catch(const SerialError& error)
+   {
+      ::close(fd);
+      throw SerialError("serial port '" + port + "': " + error.what());
+   }
    catch(...)
    {
       ::close(fd);
@@ -253,6 +260,16 @@ void SerialPort::close()
 
 size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout)
 {
+   return read(data, size, timeout, ReadMode::Full);
+}
+
+size_t SerialPort::readSome(uint8_t* data, size_t size, milliseconds timeout)
+{
+   return read(data, size, timeout, ReadMode::Some);
+}
+
+size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout, ReadMode mode)
+{
    const auto deadline = steady_clock::now() + timeout;
    size_t received = 0;
    bool polledReadable = false;
@@ -262,6 +279,10 @@ size_t SerialPort::read(uint8_t* data, size_t size, milliseconds timeout)
       if(count > 0)
       {
          received += static_cast<size_t>(count);
+         if(mode == ReadMode::Some)
+         {
+            break;
+         }
          continue;
       }
       if(count == 0 && polledReadable)
@@ -340,11 +361,12 @@ bool SerialPort::drain(milliseconds timeout)
    int queued = 0;
    while(::ioctl(_fd, TIOCOUTQ, &queued) == 0 && queued > 0)
    {
-      if(!unbounded && steady_clock::now() >= deadline)
+      const auto remaining = unbounded ? std::chrono::nanoseconds::max() : deadline - steady_clock::now();
+      if(remaining <= std::chrono::nanoseconds::zero())
       {
          return false;
       }
-      std::this_thread::sleep_for(byteTime * queued);
+      std::this_thread::sleep_for(detail::drainWait(queued, byteTime, remaining));
    }
 #else
    (void)timeout;

@@ -35,8 +35,8 @@
 #define ROBOTIQ_TACTILE_SENSOR_H
 
 #include "finger_data.h"
-#include <libserialport.h>
 #include <thread>
+#include <memory>
 #include <atomic>
 #include <mutex>
 #include <condition_variable>
@@ -57,7 +57,8 @@ class RobotiqTactileSensor
 public:
     /**
      * @brief Constructor - Opens serial port and starts data collection
-     * @param portName Serial port path (e.g., "/dev/ttyUSB0" on Linux, "COM3" on Windows)
+     * @param portName Serial port path (e.g., "/dev/ttyACM0" or the udev alias
+     *        "/dev/rq_tsf85_0" on Linux, "COM3" on Windows)
      * @param dataCallback Function pointer called when new sensor data arrives
      * @param period_ms Sampling period in milliseconds (default: 1ms for 1KHz)
      */
@@ -67,18 +68,21 @@ public:
 
     /**
      * @brief Destructor - Stops thread and closes port
+     *
+     * Never call from the data callback, which runs on the thread it joins.
      */
     ~RobotiqTactileSensor();
 
     /**
-     * @brief Check if port opened successfully
-     * @return true if connected, false otherwise
+     * @brief Check that the sensor is connected
+     * @return false when the port could not be opened or the sensor was lost
      */
     bool isConnected() const;
 
     /**
      * @brief Get last error message
-     * @return Error description string (empty if no error)
+     * @return Error description string (empty if no error); once the sensor
+     *         is lost, the cause
      */
     const char* getLastError() const;
 
@@ -90,23 +94,26 @@ public:
 
     /**
      * @brief Manually stop data collection
+     *
+     * Returns at once: the data callback may still fire shortly after.
      */
     void stop();
 
     /**
      * @brief Manually start data collection (after stop)
+     *
+     * Never call from the data callback.
      */
     void start();
 
     /**
      * @brief Query the firmware version string from the sensor
      *
-     * Sends a GET_VERSION command and waits for the reply (handled by the
-     * background read thread). Safe to call while data collection is running.
+     * Needs data collection running.
      *
      * @param version Output parameter receiving the ASCII firmware version
      * @param timeout_ms Maximum time to wait for a reply (default 2000 ms)
-     * @return true on success, false on timeout or disconnect
+     * @return false on failure; getLastError() says why
      */
     bool getFirmwareVersion(std::string& version, unsigned int timeout_ms = 2000);
 
@@ -126,8 +133,18 @@ private:
     // Internal thread function
     void threadLoop();
 
-    // Serial port handle (libserialport)
-    struct sp_port* m_port;
+    // Throws Robotiq::common::SerialError when the port fails.
+    void collectData();
+
+    void sendVersionRequest();
+
+    // A Robotiq::common::SerialPort, whose versioned namespace stays out of
+    // this header.
+    class Port;
+
+    // Null when the open failed. Once the read thread runs, only it touches
+    // the port: the serial transport is not thread-safe.
+    std::unique_ptr<Port> m_port;
 
     // Threading
     std::thread m_thread;
@@ -144,8 +161,11 @@ private:
     // Buffers
     std::vector<char> m_receiveBuffer;
 
-    // Error tracking
+    // m_lastError belongs to the user's thread. The read thread writes
+    // m_portError once, then sets m_portLost.
     std::string m_lastError;
+    std::string m_portError;
+    std::atomic<bool> m_portLost;
 
     // Data rate tracking
     std::atomic<uint64_t> m_dataRate;
@@ -155,14 +175,15 @@ private:
     std::vector<Fingers> m_baselineSamples;
     std::mutex m_baselineMutex;
 
-    // Firmware version request/response handoff between user and read thread
+    // Version handoff with the read thread. m_versionMutex guards the fields
+    // below, except m_versionRequested.
     std::mutex m_versionMutex;
     std::condition_variable m_versionCv;
     std::string m_firmwareVersion;
+    std::string m_versionError;
     bool m_versionReady;
-
-    // Serializes writes to the serial port between user thread and read thread
-    std::mutex m_portWriteMutex;
+    std::atomic<bool> m_versionRequested;
+    bool m_collecting;
 
     // Prevent copying
     RobotiqTactileSensor(const RobotiqTactileSensor&) = delete;

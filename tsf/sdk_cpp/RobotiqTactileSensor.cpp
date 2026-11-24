@@ -33,33 +33,16 @@
 
 #include "RobotiqTactileSensor.h"
 #include <chrono>
+#include <cstdio>
 #include <cstring>
 #include <thread>
-#include <cstdlib>  // for realpath
-#include <climits>  // for PATH_MAX
 
-// ============================================================================
-// Helper Functions
-// ============================================================================
+#include <Robotiq/common/serial_error.hpp>
+#include <Robotiq/common/serial_port.hpp>
 
-/**
- * @brief Resolve symbolic link to actual device path
- * @param path Input path (may be symlink)
- * @return Resolved path, or original path if resolution fails
- */
-static std::string resolveSymlink(const char* path)
+class RobotiqTactileSensor::Port : public Robotiq::common::SerialPort
 {
-    char resolved[PATH_MAX];
-    char* result = realpath(path, resolved);
-
-    if (result != nullptr)
-    {
-        return std::string(resolved);
-    }
-
-    // If realpath fails, return original path
-    return std::string(path);
-}
+};
 
 // ============================================================================
 // USB Protocol Definitions (Preserved from original communicator.cpp)
@@ -106,9 +89,8 @@ struct UsbPacket
 // ============================================================================
 // CRC-8 Implementation
 // ============================================================================
-// CRC-8 placeholder: the autosend command currently works without a valid CRC,
-// so this returns a dummy value. Replace with a proper CRC-8 if the firmware
-// begins enforcing checksums.
+// The firmware ignores the CRC: this returns the packet's own crc8 field, so
+// received packets always pass and sent ones carry 0.
 
 static uint8_t calcCrc8(uint8_t *data, size_t len)
 {
@@ -119,20 +101,34 @@ static uint8_t calcCrc8(uint8_t *data, size_t len)
 
 
 // ============================================================================
-// USB Protocol Helper Functions (Preserved from original)
+// USB Protocol Helper Functions
 // ============================================================================
 
-static bool usbSend(struct sp_port *port, UsbPacket *packet)
+static const uint32_t USB_BAUDRATE = 115200;
+
+// The largest frame takes ~23 ms at USB_BAUDRATE.
+static const std::chrono::milliseconds USB_WRITE_TIMEOUT(100);
+
+// Only sets how soon the read thread notices stop() and a version request.
+static const std::chrono::milliseconds USB_READ_TIMEOUT(1);
+
+// False on a timeout. On Windows the drain (FlushFileBuffers) has no bound.
+static bool usbSend(Robotiq::common::SerialPort& port, uint8_t command,
+                    const uint8_t *payload = nullptr, uint8_t length = 0)
 {
-    uint8_t *p = (uint8_t *)packet;
+    // crc8 must go out as 0 (see calcCrc8()).
+    UsbPacket packet = {};
+    packet.start_byte = USB_PACKET_START_BYTE;
+    packet.command = command;
+    packet.data_length = length;
+    if (length > 0)
+        memcpy(packet.data, payload, length);
+    uint8_t *p = (uint8_t *)&packet;
+    packet.crc8 = calcCrc8(p + 2, packet.data_length + 2);
 
-    packet->start_byte = USB_PACKET_START_BYTE;
-    packet->crc8 = calcCrc8(p + 2, packet->data_length + 2);
-
-    int result = sp_nonblocking_write(port, p, packet->data_length + 4);
-    sp_drain(port);
-
-    return result > 0;
+    const size_t size = packet.data_length + USB_PACKET_HEADER_SIZE;
+    const size_t sent = port.write(p, size, USB_WRITE_TIMEOUT);
+    return sent == size && port.drain(USB_WRITE_TIMEOUT);
 }
 
 static bool usbReadByte(UsbPacket *packet, unsigned int *readSoFar, uint8_t d)
@@ -267,54 +263,34 @@ static void parseSensors(UsbPacket *packet, Fingers *fingers)
 RobotiqTactileSensor::RobotiqTactileSensor(const char* portName,
                                            void (*dataCallback)(const Fingers&),
                                            unsigned int period_ms)
-    : m_port(nullptr)
-    , m_running(false)
+    : m_running(false)
     , m_connected(false)
     , m_dataCallback(dataCallback)
     , m_period_ms(period_ms)
     , m_portName(portName)
     , m_receiveBuffer(1024)
+    , m_portLost(false)
     , m_dataRate(0)
     , m_calculatingBaseline(false)
     , m_versionReady(false)
+    , m_versionRequested(false)
+    , m_collecting(false)
 {
-    // Resolve symbolic link to actual device (e.g., /dev/rq_tsf85_0 -> /dev/ttyACM0)
-    std::string resolvedPort = resolveSymlink(portName);
-
-    // Open serial port using resolved path
-    enum sp_return result = sp_get_port_by_name(resolvedPort.c_str(), &m_port);
-    if (result != SP_OK)
+    auto port = std::make_unique<Port>();
+    try
     {
-        m_lastError = "Failed to find serial port: ";
-        m_lastError += portName;
-        m_lastError += " (resolved to: ";
-        m_lastError += resolvedPort;
-        m_lastError += ")";
+        port->open(portName, USB_BAUDRATE);
+    }
+    catch (const Robotiq::common::SerialError& error)
+    {
+        m_lastError = error.what();
         return;
     }
-
-    result = sp_open(m_port, SP_MODE_READ_WRITE);
-    if (result != SP_OK)
-    {
-        m_lastError = "Failed to open serial port: ";
-        m_lastError += portName;
-        m_lastError += " (resolved to: ";
-        m_lastError += resolvedPort;
-        m_lastError += ")";
-        sp_free_port(m_port);
-        m_port = nullptr;
-        return;
-    }
-
-    // Configure serial port: 115200 baud, 8N1, no flow control
-    sp_set_baudrate(m_port, 115200);
-    sp_set_bits(m_port, 8);
-    sp_set_parity(m_port, SP_PARITY_NONE);
-    sp_set_stopbits(m_port, 1);
-    sp_set_flowcontrol(m_port, SP_FLOWCONTROL_NONE);
+    m_port = std::move(port);
 
     m_connected = true;
     m_running = true;
+    m_collecting = true;
 
     // Start data collection thread
     m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
@@ -328,13 +304,6 @@ RobotiqTactileSensor::~RobotiqTactileSensor()
     // Wait for thread to finish
     if (m_thread.joinable())
         m_thread.join();
-
-    // Close and free serial port
-    if (m_port)
-    {
-        sp_close(m_port);
-        sp_free_port(m_port);
-    }
 }
 
 bool RobotiqTactileSensor::isConnected() const
@@ -344,6 +313,8 @@ bool RobotiqTactileSensor::isConnected() const
 
 const char* RobotiqTactileSensor::getLastError() const
 {
+    if (m_portLost)
+        return m_portError.c_str();
     return m_lastError.c_str();
 }
 
@@ -359,12 +330,22 @@ void RobotiqTactileSensor::stop()
 
 void RobotiqTactileSensor::start()
 {
-    if (!m_running && m_connected)
+    if (m_running || !m_connected)
+        return;
+
+    // The old thread's stop command goes out before the new start command.
+    // It can lose the sensor meanwhile.
+    if (m_thread.joinable())
+        m_thread.join();
+    if (!m_connected)
+        return;
     {
-        m_running = true;
-        if (!m_thread.joinable())
-            m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
+        std::lock_guard<std::mutex> lk(m_versionMutex);
+        m_collecting = true;
+        m_versionRequested = false;
     }
+    m_running = true;
+    m_thread = std::thread(&RobotiqTactileSensor::threadLoop, this);
 }
 
 bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int timeout_ms)
@@ -375,38 +356,35 @@ bool RobotiqTactileSensor::getFirmwareVersion(std::string& version, unsigned int
         return false;
     }
 
-    // Reset the handoff slot before sending the request
+    if (!m_running)
     {
-        std::lock_guard<std::mutex> lk(m_versionMutex);
-        m_versionReady = false;
-        m_firmwareVersion.clear();
+        m_lastError = "Cannot query firmware version: data collection is stopped";
+        return false;
     }
 
-    // Send GET_VERSION command (no payload)
-    UsbPacket pkt;
-    pkt.command = USB_COMMAND_GET_VERSION;
-    pkt.data_length = 0;
-    {
-        std::lock_guard<std::mutex> lk(m_portWriteMutex);
-        if (!usbSend(m_port, &pkt))
-        {
-            m_lastError = "Failed to send GET_VERSION command";
-            return false;
-        }
-    }
-
-    // Wait for the read thread to populate the version
     std::unique_lock<std::mutex> lk(m_versionMutex);
+
+    m_versionReady = false;
+    m_versionError.clear();
+    m_firmwareVersion.clear();
+    m_versionRequested = true;
+
     if (!m_versionCv.wait_for(lk,
                               std::chrono::milliseconds(timeout_ms),
-                              [this] { return m_versionReady; }))
+                              [this] { return m_versionReady || !m_versionError.empty() || !m_collecting; }))
     {
         m_lastError = "Timeout waiting for firmware version reply";
         return false;
     }
-
-    version = m_firmwareVersion;
-    return true;
+    if (m_versionReady)
+    {
+        version = m_firmwareVersion;
+        return true;
+    }
+    m_lastError = m_versionError.empty()
+                      ? "Data collection stopped before the firmware version reply"
+                      : m_versionError;
+    return false;
 }
 
 bool RobotiqTactileSensor::findBaseline(Fingers& baseline)
@@ -510,8 +488,35 @@ bool RobotiqTactileSensor::findBaseline(Fingers& baseline)
 
 void RobotiqTactileSensor::threadLoop()
 {
-    UsbPacket send;
-    UsbPacket recv;
+    try
+    {
+        collectData();
+    }
+    catch (const Robotiq::common::SerialError& error)
+    {
+        // Closed so a re-plugged sensor gets its name back.
+        m_port->close();
+        if (!m_portLost)
+        {
+            m_portError = std::string("Connection lost: ") + error.what();
+            m_portLost = true;
+        }
+        m_dataRate = 0;
+        m_connected = false;
+        m_running = false;
+    }
+
+    {
+        std::lock_guard<std::mutex> lk(m_versionMutex);
+        m_collecting = false;
+        m_versionRequested = false;
+    }
+    m_versionCv.notify_all();
+}
+
+void RobotiqTactileSensor::collectData()
+{
+    UsbPacket recv = {};
     unsigned int recvSoFar = 0;
 
     // Timer for timestamps
@@ -524,46 +529,20 @@ void RobotiqTactileSensor::threadLoop()
     // Gathered data
     Fingers fingers = {0};
 
-    // Send auto-send message
-    send.command = USB_COMMAND_AUTOSEND_SYNC_SENSORS;
-    send.data_length = 1;
-    send.data[0] = m_period_ms;
-    {
-        std::lock_guard<std::mutex> lk(m_portWriteMutex);
-        usbSend(m_port, &send);
-    }
+    const uint8_t period = static_cast<uint8_t>(m_period_ms);
+    if (!usbSend(*m_port, USB_COMMAND_AUTOSEND_SYNC_SENSORS, &period, 1))
+        throw Robotiq::common::SerialError("the sensor did not take the start command");
 
+    uint8_t* buffer = reinterpret_cast<uint8_t*>(m_receiveBuffer.data());
     while (m_running)
     {
-        // Wait for at least 1 byte with 1ms timeout (matches Qt's waitForReadyRead)
-        char firstByte;
-        int result = sp_blocking_read(m_port, &firstByte, 1, 1);
+        if (m_versionRequested.exchange(false))
+            sendVersionRequest();
 
-        if (result != 1)
-            continue;  // Timeout or error
-
-        // Now check how much MORE data is available
-        int64_t available = sp_input_waiting(m_port);
-
-        // Total available = 1 byte we read + any more waiting
-        available = available + 1;
-
-        // Make sure there is enough room in the buffer
-        if (m_receiveBuffer.size() < (size_t)available)
-            m_receiveBuffer.resize(available);
-
-        // Put the first byte in the buffer
-        m_receiveBuffer[0] = firstByte;
-
-        // Read the rest (non-blocking)
-        if (available > 1)
-        {
-            int more = sp_nonblocking_read(m_port, m_receiveBuffer.data() + 1, available - 1);
-            if (more < 0)
-                available = 1;  // Just the first byte
-            else
-                available = 1 + more;
-        }
+        int64_t available = static_cast<int64_t>(m_port->readSome(
+            buffer, m_receiveBuffer.size(), USB_READ_TIMEOUT));
+        if (available == 0)
+            continue;
 
         // Show progress
         receivedBytes += available;
@@ -644,12 +623,18 @@ void RobotiqTactileSensor::threadLoop()
         }
     }
 
-    // Stop auto-send message
-    send.command = USB_COMMAND_AUTOSEND_SYNC_SENSORS;
-    send.data_length = 1;
-    send.data[0] = 0;
+    // Best effort: the port closes next either way.
+    const uint8_t stopPeriod = 0;
+    (void)usbSend(*m_port, USB_COMMAND_AUTOSEND_SYNC_SENSORS, &stopPeriod, 1);
+}
+
+void RobotiqTactileSensor::sendVersionRequest()
+{
+    if (usbSend(*m_port, USB_COMMAND_GET_VERSION))
+        return;
     {
-        std::lock_guard<std::mutex> lk(m_portWriteMutex);
-        usbSend(m_port, &send);
+        std::lock_guard<std::mutex> lk(m_versionMutex);
+        m_versionError = "Failed to send GET_VERSION command";
     }
+    m_versionCv.notify_all();
 }
