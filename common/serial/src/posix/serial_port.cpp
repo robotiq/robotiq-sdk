@@ -209,6 +209,7 @@ SerialPort::~SerialPort()
 
 void SerialPort::open(const std::string& port, uint32_t baudrate)
 {
+   close();
    // O_NONBLOCK also keeps the open itself from hanging on a modem line
    // waiting for carrier; the timing behaviour it gives read()/write()
    // is what the timeouts below are built on.
@@ -352,6 +353,10 @@ size_t SerialPort::write(const uint8_t* data, size_t size, milliseconds timeout)
 
 bool SerialPort::drain(milliseconds timeout)
 {
+   if(_fd < 0)
+   {
+      fail("draining the serial port", EBADF);
+   }
    // tcdrain() alone has no deadline, and a pseudo-terminal drains only
    // as fast as its peer reads, so a stalled socat would hang it. The
    // output queue is watched against the deadline first; what tcdrain()

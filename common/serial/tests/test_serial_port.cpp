@@ -88,6 +88,12 @@ TEST(SerialPort, OpeningAMissingPortNamesIt)
       ThrowsMessage<SerialError>(StrEq("no serial port named '" + kMissingPort + "' (is the device connected?)")));
 }
 
+TEST(SerialPort, DrainRaisesOnAPortNeverOpened)
+{
+   SerialPort port;
+   EXPECT_THAT([&] { (void)port.drain(10ms); }, ThrowsMessage<SerialError>(HasSubstr("draining the serial port")));
+}
+
 TEST(SerialPort, CloseIsSafeOnAPortNeverOpened)
 {
    SerialPort port;
@@ -178,6 +184,14 @@ TEST_F(PtySerialPort, ReadWaitsAcrossChunksThatArriveWhileItWaits)
 
       ASSERT_THAT(frame, ElementsAre(0x09, 0x03, 0x06, 0x11));
    }
+}
+
+TEST_F(PtySerialPort, OpeningAnOpenPortReopensIt)
+{
+   _port.open(_peer.slavePath(), 115200);
+   ASSERT_TRUE(_peer.send({0xAA}));
+
+   EXPECT_THAT(read(1, 10s), ElementsAre(0xAA));
 }
 
 TEST_F(PtySerialPort, ReadReturnsWhatArrivedByItsTimeout)
