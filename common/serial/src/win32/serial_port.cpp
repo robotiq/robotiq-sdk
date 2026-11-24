@@ -97,6 +97,7 @@ SerialPort::~SerialPort()
 
 void SerialPort::open(const std::string& port, uint32_t baudrate)
 {
+   close();
    // No sharing: a second opener of the same device is a bug, and the
    // driver enforcing it beats two processes interleaving frames.
    const HANDLE handle =

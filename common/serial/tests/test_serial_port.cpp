@@ -88,6 +88,12 @@ TEST(SerialPort, OpeningAMissingPortNamesIt)
       ThrowsMessage<SerialError>(StrEq("no serial port named '" + kMissingPort + "' (is the device connected?)")));
 }
 
+TEST(SerialPort, DrainRaisesOnAPortNeverOpened)
+{
+   SerialPort port;
+   EXPECT_THAT([&] { (void)port.drain(10ms); }, ThrowsMessage<SerialError>(HasSubstr("draining the serial port")));
+}
+
 TEST(SerialPort, CloseIsSafeOnAPortNeverOpened)
 {
    SerialPort port;
@@ -158,6 +164,34 @@ TEST_F(PtySerialPort, ReadWaitsForBytesThatHaveNotArrivedYet)
 
       ASSERT_THAT(frame, ElementsAre(0x09, 0x03, 0x06, 0x11));
    }
+}
+
+TEST_F(PtySerialPort, ReadWaitsAcrossChunksThatArriveWhileItWaits)
+{
+   // The pauses let most rounds wake the read on the first chunk, then
+   // find the port dry before the second. The test passes either way.
+   for(int round = 0; round < 16; ++round)
+   {
+      std::thread peer([this] {
+         std::this_thread::sleep_for(5ms);
+         EXPECT_TRUE(_peer.send({0x09, 0x03}));
+         std::this_thread::sleep_for(5ms);
+         EXPECT_TRUE(_peer.send({0x06, 0x11}));
+      });
+      std::vector<uint8_t> frame;
+      EXPECT_NO_THROW(frame = read(4, 10s));
+      peer.join();
+
+      ASSERT_THAT(frame, ElementsAre(0x09, 0x03, 0x06, 0x11));
+   }
+}
+
+TEST_F(PtySerialPort, OpeningAnOpenPortReopensIt)
+{
+   _port.open(_peer.slavePath(), 115200);
+   ASSERT_TRUE(_peer.send({0xAA}));
+
+   EXPECT_THAT(read(1, 10s), ElementsAre(0xAA));
 }
 
 TEST_F(PtySerialPort, ReadReturnsWhatArrivedByItsTimeout)
