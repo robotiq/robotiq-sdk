@@ -11,7 +11,9 @@
 #include "comm_timeouts.hpp"
 #include "drain_wait.hpp"
 
+#include <algorithm>
 #include <chrono>
+#include <functional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -58,6 +60,71 @@ TEST(DrainWait, NeverRunsPastTheDeadline)
 TEST(DrainWait, IsCappedWithoutADeadline)
 {
    EXPECT_EQ(detail::drainWait(1280, kByteTime, std::chrono::nanoseconds::max()), detail::kMaxDrainPoll);
+}
+
+// A clock that advances only when the loop sleeps.
+class FakeDrainClock
+{
+public:
+   [[nodiscard]] std::chrono::steady_clock::time_point now() const { return _now; }
+
+   void sleep(std::chrono::nanoseconds wait)
+   {
+      _now += wait;
+      _longestSleep = std::max(_longestSleep, wait);
+   }
+
+   [[nodiscard]] std::chrono::nanoseconds slept() const { return _now - std::chrono::steady_clock::time_point(); }
+   [[nodiscard]] std::chrono::nanoseconds longestSleep() const { return _longestSleep; }
+
+private:
+   std::chrono::steady_clock::time_point _now;
+   std::chrono::nanoseconds _longestSleep{0};
+};
+
+bool waitForEmptyQueue(FakeDrainClock& clock, const std::function<int()>& queued, std::chrono::milliseconds timeout)
+{
+   return detail::waitForEmptyQueue(
+      queued,
+      kByteTime,
+      timeout,
+      [&] { return clock.now(); },
+      [&](std::chrono::nanoseconds wait) { clock.sleep(wait); });
+}
+
+TEST(WaitForEmptyQueue, GivesUpOnAStuckQueueAtTheDeadlineInShortSleeps)
+{
+   FakeDrainClock clock;
+
+   EXPECT_FALSE(waitForEmptyQueue(clock, [] { return 1280; }, 50ms));
+   EXPECT_EQ(clock.slept(), 50ms);
+   EXPECT_LE(clock.longestSleep(), detail::kMaxDrainPoll);
+}
+
+TEST(WaitForEmptyQueue, ReturnsOnceTheQueueEmpties)
+{
+   FakeDrainClock clock;
+   int polls = 0;
+
+   EXPECT_TRUE(waitForEmptyQueue(clock, [&] { return ++polls < 4 ? 4 : 0; }, 50ms));
+   EXPECT_EQ(clock.slept(), 3 * 4 * kByteTime);
+}
+
+TEST(WaitForEmptyQueue, WaitsWithoutBoundForAZeroTimeout)
+{
+   FakeDrainClock clock;
+   int polls = 0;
+
+   EXPECT_TRUE(waitForEmptyQueue(clock, [&] { return ++polls < 1000 ? 1280 : 0; }, 0ms));
+   EXPECT_LE(clock.longestSleep(), detail::kMaxDrainPoll);
+}
+
+TEST(WaitForEmptyQueue, StopsWhenTheQueueCannotBeRead)
+{
+   FakeDrainClock clock;
+
+   EXPECT_TRUE(waitForEmptyQueue(clock, [] { return -1; }, 50ms));
+   EXPECT_EQ(clock.slept(), 0ns);
 }
 
 using detail::CommTimeouts;

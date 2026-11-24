@@ -360,18 +360,19 @@ bool SerialPort::drain(milliseconds timeout)
    // output queue is watched against the deadline first; what tcdrain()
    // still waits for after that is the adapter's own FIFO.
 #ifdef TIOCOUTQ
-   const bool unbounded = timeout == milliseconds::zero();
-   const auto deadline = steady_clock::now() + timeout;
    const auto byteTime = std::chrono::microseconds(std::chrono::seconds(1)) * kWireBitsPerByte / _baudrate;
-   int queued = 0;
-   while(::ioctl(_fd, TIOCOUTQ, &queued) == 0 && queued > 0)
+   const auto queued = [this] {
+      int count = 0;
+      return ::ioctl(_fd, TIOCOUTQ, &count) == 0 ? count : -1;
+   };
+   if(!detail::waitForEmptyQueue(
+         queued,
+         byteTime,
+         timeout,
+         [] { return steady_clock::now(); },
+         [](std::chrono::nanoseconds wait) { std::this_thread::sleep_for(wait); }))
    {
-      const auto remaining = unbounded ? std::chrono::nanoseconds::max() : deadline - steady_clock::now();
-      if(remaining <= std::chrono::nanoseconds::zero())
-      {
-         return false;
-      }
-      std::this_thread::sleep_for(detail::drainWait(queued, byteTime, remaining));
+      return false;
    }
 #else
    (void)timeout;
