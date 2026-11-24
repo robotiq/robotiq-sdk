@@ -65,13 +65,10 @@ jobs:
     if: always()
     needs: [sdk-cpp, python]
     runs-on: ubuntu-latest
-    # No checkout in this job, so tsf/ does not exist here: run from the
-    # workspace instead of the workflow default.
-    defaults:
-      run:
-        working-directory: .
     steps:
-      - name: Every job succeeded
-        run: |
-          echo '${{ toJSON(needs) }}'
-          test "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped') }}" = "false"
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: .github/actions
+      - uses: ./.github/actions/ci-gate
+        with:
+          needs: ${{ toJSON(needs) }}

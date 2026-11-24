@@ -20,6 +20,7 @@
 namespace Robotiq::common {
 namespace {
 using namespace std::chrono_literals;
+using ::testing::AnyOf;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 using ::testing::IsEmpty;
@@ -97,11 +98,27 @@ TEST_F(PtySerialPort, ReadWaitsForBytesThatHaveNotArrivedYet)
    }
 }
 
+TEST_F(PtySerialPort, ReadReturnsWhatArrivedByItsTimeout)
+{
+   const auto start = std::chrono::steady_clock::now();
+   EXPECT_THAT(read(4, 50ms), IsEmpty());
+   const auto elapsed = std::chrono::steady_clock::now() - start;
+   EXPECT_GE(elapsed, 50ms);
+   EXPECT_LT(elapsed, 5s);
+
+   ASSERT_TRUE(_peer.send({0x09, 0x03}));
+   // The pty delivers the chunk at once: the first byte settles the second.
+   ASSERT_THAT(read(1, 2s), ElementsAre(0x09));
+   EXPECT_THAT(read(4, 50ms), ElementsAre(0x03));
+}
+
 TEST_F(PtySerialPort, ReadRaisesWhenThePeerHangsUp)
 {
    _peer.hangUp();
 
-   EXPECT_THAT([&] { (void)read(64, 500ms); }, ThrowsMessage<SerialError>(HasSubstr("serial")));
+   EXPECT_THAT([&] { (void)read(64, 500ms); },
+               ThrowsMessage<SerialError>(
+                  AnyOf(HasSubstr("waiting for serial input"), HasSubstr("reading from the serial port"))));
 }
 
 TEST_F(PtySerialPort, WriteReachesThePeer)
@@ -119,6 +136,22 @@ TEST_F(PtySerialPort, WriteReachesThePeer)
    EXPECT_EQ(received, frame);
 }
 
+TEST_F(PtySerialPort, WriteWaitsForThePeerToMakeRoom)
+{
+   // Far more than a pty buffers.
+   const std::vector<uint8_t> data(1 << 20, 0x55);
+   std::vector<uint8_t> received;
+   std::thread peer([&] {
+      std::this_thread::sleep_for(100ms);
+      received = _peer.receive(data.size());
+   });
+   const size_t sent = _port.write(data.data(), data.size(), 10s);
+   peer.join();
+
+   EXPECT_EQ(sent, data.size());
+   EXPECT_EQ(received, data);
+}
+
 TEST_F(PtySerialPort, WriteStopsAtItsDeadlineWhenThePeerNeverReads)
 {
    // Far more than a pty buffers, with no one reading the other end.
@@ -133,7 +166,8 @@ TEST_F(PtySerialPort, WriteRaisesWhenThePeerHangsUp)
    const std::vector<uint8_t> frame = {0x9A, 0x00, 0xE3, 0x00};
 
    EXPECT_THAT([&] { (void)_port.write(frame.data(), frame.size(), 500ms); },
-               ThrowsMessage<SerialError>(HasSubstr("serial")));
+               ThrowsMessage<SerialError>(
+                  AnyOf(HasSubstr("writing to the serial port"), HasSubstr("waiting to send on the serial port"))));
 }
 
 TEST_F(PtySerialPort, OpenRejectsABaudRateThePlatformHasNoConstantFor)

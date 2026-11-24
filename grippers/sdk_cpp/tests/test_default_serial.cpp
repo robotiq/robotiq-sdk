@@ -13,6 +13,7 @@
 #include <Robotiq/gripper/serial_io_exception.hpp>
 
 #ifndef _WIN32
+#include <future>
 #include <string>
 #include <vector>
 
@@ -137,6 +138,18 @@ TEST_F(PtySerialTest, opening_an_already_open_port_is_ignored)
    EXPECT_TRUE(serial->isOpen());
 }
 
+TEST_F(PtySerialTest, write_reaches_the_peer)
+{
+   const std::vector<uint8_t> request = {0x09, 0x03, 0x07, 0xD0, 0x00, 0x03};
+   const auto serial = _pty.openSerial(10s);
+   // write() waits for the output to drain, which on macOS a pty does only
+   // once the peer has read it, so the peer must already be reading.
+   auto received = std::async(std::launch::async, [&] { return _pty.receive(request.size()); });
+   serial->write(request);
+
+   EXPECT_EQ(received.get(), request);
+}
+
 #ifdef __APPLE__
 // Only a macOS pty holds written bytes until the peer reads them.
 TEST_F(PtySerialTest, write_times_out_when_the_peer_never_reads)
@@ -163,7 +176,9 @@ TEST_F(PtySerialTest, a_read_error_is_a_serial_io_exception)
    _pty.hangUp();
 
    EXPECT_THAT([&] { (void)serial->read(1, 500ms); },
-               ::testing::ThrowsMessage<SerialIOException>(::testing::HasSubstr("serial")));
+               ::testing::ThrowsMessage<SerialIOException>(
+                  ::testing::AnyOf(::testing::HasSubstr("waiting for serial input"),
+                                   ::testing::HasSubstr("reading from the serial port"))));
 }
 
 TEST_F(PtySerialTest, a_write_error_is_a_serial_io_exception)
@@ -172,7 +187,9 @@ TEST_F(PtySerialTest, a_write_error_is_a_serial_io_exception)
    _pty.hangUp();
 
    EXPECT_THAT([&] { serial->write({0x09, 0x03, 0x07, 0xD0, 0x00, 0x03}); },
-               ::testing::ThrowsMessage<SerialIOException>(::testing::HasSubstr("serial")));
+               ::testing::ThrowsMessage<SerialIOException>(
+                  ::testing::AnyOf(::testing::HasSubstr("writing to the serial port"),
+                                   ::testing::HasSubstr("waiting to send on the serial port"))));
 }
 
 TEST_F(PtySerialTest, a_short_write_is_a_timeout)

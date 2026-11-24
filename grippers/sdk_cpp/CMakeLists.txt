@@ -70,7 +70,7 @@ endif()
 # tests and the examples. Vendored C (third_party/) keeps its own warning
 # state.
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/RobotiqWarnings.cmake")
-robotiq_add_warnings_target(grippers_warnings ${GRIPPERS_WARNINGS_AS_ERRORS})
+robotiq_add_warnings_target(grippers_warnings AS_ERRORS ${GRIPPERS_WARNINGS_AS_ERRORS})
 
 # --- SDK library --------------------------------------------------------
 # The SDK is one set of sources published in three pieces: grippers_usage holds
