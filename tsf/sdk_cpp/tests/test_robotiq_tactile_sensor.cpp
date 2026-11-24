@@ -10,6 +10,7 @@
 #include <chrono>
 #include <future>
 #include <memory>
+#include <stdexcept>
 #include <string>
 #include <thread>
 #include <vector>
@@ -60,6 +61,18 @@ void onSample(const Fingers& fingers)
     ++g_samples;
 }
 
+void throwOnSample(const Fingers&)
+{
+    throw std::runtime_error("the callback failed");
+}
+
+std::atomic<RobotiqTactileSensor*> g_sensorToRestart(nullptr);
+
+void restartOnSample(const Fingers&)
+{
+    g_sensorToRestart.load()->start();
+}
+
 template <typename Condition>
 bool waitFor(Condition condition, std::chrono::milliseconds timeout = 10s)
 {
@@ -80,6 +93,18 @@ TEST(TactileSensor, OpenFailureReportsTheTransportMessage)
     EXPECT_FALSE(sensor.isConnected());
     EXPECT_NE(std::string(sensor.getLastError()).find("'" + MISSING_PORT + "'"), std::string::npos)
         << sensor.getLastError();
+}
+
+TEST(TactileSensor, RejectsAPeriodItCannotSend)
+{
+    for (unsigned int period_ms : {0U, 256U})
+    {
+        RobotiqTactileSensor sensor(MISSING_PORT.c_str(), onSample, period_ms);
+
+        EXPECT_FALSE(sensor.isConnected());
+        EXPECT_EQ(std::string(sensor.getLastError()),
+                  "Sampling period must be 1 to 255 ms, got " + std::to_string(period_ms));
+    }
 }
 
 #ifndef _WIN32
@@ -104,10 +129,10 @@ protected:
         return std::async(std::launch::async, [this, size] { return m_hub.receive(size); });
     }
 
-    void connect(unsigned int period_ms = 1)
+    void connect(unsigned int period_ms = 1, void (*callback)(const Fingers&) = onSample)
     {
         std::future<std::vector<uint8_t> > startFrame = hubReceiveAsync(5);
-        m_sdk.reset(new RobotiqTactileSensor(m_hub.slavePath().c_str(), onSample, period_ms));
+        m_sdk.reset(new RobotiqTactileSensor(m_hub.slavePath().c_str(), callback, period_ms));
         ASSERT_TRUE(m_sdk->isConnected()) << m_sdk->getLastError();
         ASSERT_EQ(startFrame.get(), autosend(static_cast<uint8_t>(period_ms)));
     }
@@ -138,6 +163,27 @@ TEST_F(TactileSensorOverPty, DeliversSamples)
 
     EXPECT_TRUE(waitFor([] { return g_samples > 0; }));
     EXPECT_EQ(g_temperature, 0x0123);
+}
+
+TEST_F(TactileSensorOverPty, AnExceptionFromTheCallbackEndsCollection)
+{
+    connect(1, throwOnSample);
+
+    ASSERT_TRUE(m_hub.send(temperature(1)));
+
+    EXPECT_TRUE(waitFor([this] { return !m_sdk->isConnected(); }));
+    EXPECT_STREQ(m_sdk->getLastError(), "Data collection stopped: the callback failed");
+}
+
+TEST_F(TactileSensorOverPty, StartFromTheCallbackEndsCollection)
+{
+    connect(1, restartOnSample);
+    g_sensorToRestart = m_sdk.get();
+
+    ASSERT_TRUE(m_hub.send(temperature(1)));
+
+    EXPECT_TRUE(waitFor([this] { return !m_sdk->isConnected(); }));
+    EXPECT_STREQ(m_sdk->getLastError(), "Data collection stopped: start() called from the data callback");
 }
 
 TEST_F(TactileSensorOverPty, ReadsTheFirmwareVersion)
@@ -311,6 +357,35 @@ TEST_F(TactileSensorOverPty, ReassemblesAFrameSplitAcrossReads)
         ASSERT_TRUE(waitFor([round] { return g_samples == round; }));
     }
     EXPECT_EQ(g_temperature, 0x0123);
+}
+
+TEST_F(TactileSensorOverPty, SkipsBytesBeforeAStartByte)
+{
+    connect();
+    std::vector<uint8_t> bytes = {0x01, 0x02, 0x03};
+    const std::vector<uint8_t> frame = temperature(0x0123);
+    bytes.insert(bytes.end(), frame.begin(), frame.end());
+
+    ASSERT_TRUE(m_hub.send(bytes));
+
+    EXPECT_TRUE(waitFor([] { return g_samples > 0; }));
+    EXPECT_EQ(g_temperature, 0x0123);
+    EXPECT_EQ(g_samples, 1);
+}
+
+TEST_F(TactileSensorOverPty, AReplyThatIsNotASampleSkipsTheCallback)
+{
+    connect();
+    // A sample's payload under the bootloader command.
+    std::vector<uint8_t> bytes = {0x9A, 0x00, 0xE2, 0x03, 0x60, 0x00, 0x07};
+    const std::vector<uint8_t> frame = temperature(0x0123);
+    bytes.insert(bytes.end(), frame.begin(), frame.end());
+
+    ASSERT_TRUE(m_hub.send(bytes));
+
+    // Frames are parsed in order: once the sample is in, so is the reply.
+    EXPECT_TRUE(waitFor([] { return g_temperature == 0x0123; }));
+    EXPECT_EQ(g_samples, 1);
 }
 
 TEST_F(TactileSensorOverPty, HandlesABurstLargerThanItsReadBuffer)

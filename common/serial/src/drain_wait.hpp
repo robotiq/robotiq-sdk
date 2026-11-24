@@ -22,6 +22,29 @@ constexpr std::chrono::nanoseconds drainWait(int queued,
 {
    return std::min({byteTime * queued, kMaxDrainPoll, remaining});
 }
+
+// True once \p queued() reports an empty queue, or fails (negative); false
+// when \p timeout passes first. A zero \p timeout waits without bound.
+template <typename Queued, typename Now, typename Sleep>
+bool waitForEmptyQueue(Queued queued,
+                       std::chrono::nanoseconds byteTime,
+                       std::chrono::milliseconds timeout,
+                       Now now,
+                       Sleep sleep)
+{
+   const bool unbounded = timeout == std::chrono::milliseconds::zero();
+   const auto deadline = now() + timeout;
+   for(int count = queued(); count > 0; count = queued())
+   {
+      const auto remaining = unbounded ? std::chrono::nanoseconds::max() : deadline - now();
+      if(remaining <= std::chrono::nanoseconds::zero())
+      {
+         return false;
+      }
+      sleep(drainWait(count, byteTime, remaining));
+   }
+   return true;
+}
 } // namespace detail
 } // namespace ROBOTIQ_COMMON_ABI
 } // namespace Robotiq::common

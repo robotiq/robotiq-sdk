@@ -59,8 +59,11 @@ public:
      * @brief Constructor - Opens serial port and starts data collection
      * @param portName Serial port path (e.g., "/dev/ttyACM0" or the udev alias
      *        "/dev/rq_tsf85_0" on Linux, "COM3" on Windows)
-     * @param dataCallback Function pointer called when new sensor data arrives
-     * @param period_ms Sampling period in milliseconds (default: 1ms for 1KHz)
+     * @param dataCallback Function pointer called when new sensor data
+     *        arrives, on the read thread. An exception it throws ends
+     *        collection and disconnects; getLastError() reports it.
+     * @param period_ms Sampling period in milliseconds, 1 to 255 (default:
+     *        1 ms for 1 kHz); outside that range the port is not opened
      */
     RobotiqTactileSensor(const char* portName,
                          void (*dataCallback)(const Fingers&),
@@ -69,7 +72,8 @@ public:
     /**
      * @brief Destructor - Stops thread and closes port
      *
-     * Never call from the data callback, which runs on the thread it joins.
+     * Never call from the data callback, which runs on the thread it joins:
+     * that terminates the program.
      */
     ~RobotiqTactileSensor();
 
@@ -102,7 +106,7 @@ public:
     /**
      * @brief Manually start data collection (after stop)
      *
-     * Never call from the data callback.
+     * Called from the data callback, it ends collection instead.
      */
     void start();
 
@@ -135,6 +139,9 @@ private:
 
     // Throws Robotiq::common::SerialError when the port fails.
     void collectData();
+
+    // Closes the port and disconnects; the first cause is kept.
+    void endCollection(const std::string& cause);
 
     void sendVersionRequest();
 
