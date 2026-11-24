@@ -87,6 +87,11 @@ void configure(HANDLE handle, uint32_t baudrate)
       // An unsupported baud rate surfaces here, as ERROR_INVALID_PARAMETER.
       fail("configuring the serial port at " + std::to_string(baudrate) + " baud", ::GetLastError());
    }
+   // Bytes a device sent before this open would be parsed from mid-frame.
+   if(!::PurgeComm(handle, PURGE_RXCLEAR))
+   {
+      fail("discarding stale input", ::GetLastError());
+   }
 }
 } // namespace
 

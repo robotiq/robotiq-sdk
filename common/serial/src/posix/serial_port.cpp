@@ -139,6 +139,11 @@ void configure(int fd, uint32_t baudrate)
    {
       fail("configuring the serial port", errno);
    }
+   // Bytes a device sent before this open would be parsed from mid-frame.
+   if(::tcflush(fd, TCIFLUSH) != 0)
+   {
+      fail("discarding stale input", errno);
+   }
 }
 
 // Both are conveniences rather than requirements of the link, and a

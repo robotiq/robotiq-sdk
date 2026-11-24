@@ -134,6 +134,18 @@ protected:
    SerialPort _port;
 };
 
+TEST_F(PtySerialPort, OpenDiscardsInputSentBeforeIt)
+{
+   ASSERT_TRUE(_peer.send({0xAA, 0xBB}));
+   // The pty delivers the chunk at once: the first byte settles the second.
+   ASSERT_THAT(read(1, 10s), ElementsAre(0xAA));
+   _port.close();
+
+   _port.open(_peer.slavePath(), 115200);
+
+   EXPECT_THAT(read(1, 0ms), IsEmpty());
+}
+
 TEST_F(PtySerialPort, AZeroTimeoutReadTakesOnlyWhatIsBuffered)
 {
    ASSERT_TRUE(_peer.send({0xAA, 0xBB, 0xCC}));
