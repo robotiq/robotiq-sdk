@@ -18,7 +18,7 @@ robotiq_link_common(<target> serial)
 
 `robotiq_link_common` adds the module once per build, however many SDKs ask for it (the [dev/](../dev/) aggregate builds them all together), and compiles its sources into `<target>` privately, with that target's flags. `$<BUILD_INTERFACE:>` keeps the module out of `<target>`'s export set, where it has no artifact to resolve to.
 
-Each SDK gets its own copy of a module's code. A program that links two SDKs therefore holds two copies of the `Robotiq::common` symbols: the static archives resolve them silently to one, which is harmless while both SDKs come from the same repository version, as their identical sources guarantee. Mixing SDK builds of different versions in one program is not supported.
+Each SDK gets its own copy of a module's code. The code sits in an inline namespace named after the repository version (e.g. `Robotiq::common::v3_1_0`, from `ROBOTIQ_COMMON_ABI`, which `cmake/RobotiqCommon.cmake` derives from `VERSION`). A program that links SDKs of the same version holds identical copies, which the linker resolves to one; SDKs of different versions keep distinct symbols, so they link side by side, as static or shared libraries. An SDK's installed headers therefore never name a `Robotiq::common` type: they declare a private class of their own that derives from it, as `DefaultSerial::Port` does.
 
 ## Adding a module
 
@@ -26,7 +26,7 @@ Each SDK gets its own copy of a module's code. A program that links two SDKs the
 - Its `CMakeLists.txt` defines two INTERFACE targets:
   - `robotiq_common_<module>` (alias `Robotiq::common::<module>`): the module's sources, for `robotiq_link_common`;
   - `robotiq_common_<module>_headers` (alias `Robotiq::common::<module>_headers`): the include directory alone, for code that calls the module without compiling it, such as an SDK's unit tests linking the SDK's library.
-- The code lives in namespace `Robotiq::common`, is C++17, and reports errors with its own exception types: each SDK turns them into its own error reporting at its boundary.
+- The code lives in `namespace Robotiq::common { inline namespace ROBOTIQ_COMMON_ABI {`, its headers include `<Robotiq/common/abi.hpp>`, its `_headers` target links `robotiq_common_abi`, and it is C++17, and reports errors with its own exception types: each SDK turns them into its own error reporting at its boundary.
 - Its unit tests sit in `common/<module>/tests/`, added to [CMakeLists.txt](CMakeLists.txt) here, and link `robotiq_common_warnings`, so the module's sources build with the SDKs' warnings as errors (`cmake/RobotiqWarnings.cmake`). Test support other suites reuse goes in a header-only target of its own, as `serial/`'s `Robotiq::common::serial_testing` (a pseudo-terminal peer, namespace `Robotiq::common::serial_testing`).
 
 ## Tests

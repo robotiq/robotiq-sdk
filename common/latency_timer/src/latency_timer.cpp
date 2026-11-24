@@ -12,6 +12,7 @@
 #include <system_error>
 
 namespace Robotiq::common {
+inline namespace ROBOTIQ_COMMON_ABI {
 std::string latencyTimerPath(const std::string& port, const std::string& sysfsDevices)
 {
    std::error_code error;
@@ -45,6 +46,7 @@ bool applyLatencyTimer(const std::string& path, int milliseconds)
    out << milliseconds << std::flush;
    return out.good();
 }
+} // namespace ROBOTIQ_COMMON_ABI
 } // namespace Robotiq::common
 
 #endif

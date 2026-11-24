@@ -29,10 +29,6 @@ namespace Robotiq {
 class Logger;
 } // namespace Robotiq
 
-namespace Robotiq::common {
-class SerialPort;
-} // namespace Robotiq::common
-
 namespace Robotiq::detail {
 
 class DefaultSerial : public Serial
@@ -59,8 +55,11 @@ public:
    [[nodiscard]] const SerialConfig& getConfig() const;
 
 private:
+   // A common::SerialPort, whose versioned namespace stays out of this header.
+   class Port;
+
    // Null when closed; the OS handle lives inside it.
-   std::unique_ptr<common::SerialPort> _port;
+   std::unique_ptr<Port> _port;
    SerialConfig _config;
    std::shared_ptr<Logger> _logger;
 };

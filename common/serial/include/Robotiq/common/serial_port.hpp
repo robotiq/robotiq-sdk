@@ -7,12 +7,15 @@
 
 #pragma once
 
+#include <Robotiq/common/abi.hpp>
+
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <string>
 
 namespace Robotiq::common {
+inline namespace ROBOTIQ_COMMON_ABI {
 class SerialPort
 {
 public:
@@ -57,4 +60,5 @@ private:
    uint32_t _baudrate = 0;
 #endif
 };
+} // namespace ROBOTIQ_COMMON_ABI
 } // namespace Robotiq::common

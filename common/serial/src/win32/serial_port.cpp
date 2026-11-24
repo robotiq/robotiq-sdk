@@ -27,6 +27,7 @@
 #include <Robotiq/common/serial_error.hpp>
 
 namespace Robotiq::common {
+inline namespace ROBOTIQ_COMMON_ABI {
 namespace {
 using std::chrono::milliseconds;
 
@@ -201,4 +202,5 @@ bool SerialPort::drain(milliseconds /*timeout*/)
    }
    return true;
 }
+} // namespace ROBOTIQ_COMMON_ABI
 } // namespace Robotiq::common

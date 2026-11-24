@@ -7,10 +7,13 @@
 
 #pragma once
 
+#include <Robotiq/common/abi.hpp>
+
 #include <stdexcept>
 #include <string>
 
 namespace Robotiq::common {
+inline namespace ROBOTIQ_COMMON_ABI {
 class SerialError : public std::runtime_error
 {
 public:
@@ -19,4 +22,5 @@ public:
    {
    }
 };
+} // namespace ROBOTIQ_COMMON_ABI
 } // namespace Robotiq::common

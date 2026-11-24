@@ -5,6 +5,7 @@ add_library(robotiq_common_serial_headers INTERFACE)
 add_library(Robotiq::common::serial_headers ALIAS robotiq_common_serial_headers)
 target_include_directories(robotiq_common_serial_headers INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
 target_compile_features(robotiq_common_serial_headers INTERFACE cxx_std_17)
+target_link_libraries(robotiq_common_serial_headers INTERFACE robotiq_common_abi)
 
 add_library(robotiq_common_serial INTERFACE)
 add_library(Robotiq::common::serial ALIAS robotiq_common_serial)

@@ -17,6 +17,10 @@
 #include <Robotiq/gripper/serial_io_exception.hpp>
 
 namespace Robotiq::detail {
+class DefaultSerial::Port : public common::SerialPort
+{
+};
+
 namespace {
 // The Serial contract promises SerialIOException.
 template <typename Operation>
@@ -61,7 +65,7 @@ void DefaultSerial::open()
 
    // Published only once configured: a throw here leaves the connection
    // closed rather than half-open.
-   auto port = std::make_unique<common::SerialPort>();
+   auto port = std::make_unique<Port>();
    translateErrors([&] { port->open(_config.port, _config.baudrate); });
    _port = std::move(port);
 

@@ -2,6 +2,15 @@
 # <target>. See common/README.md.
 
 get_filename_component(ROBOTIQ_SDK_ROOT "${CMAKE_CURRENT_LIST_DIR}" DIRECTORY)
+include("${CMAKE_CURRENT_LIST_DIR}/RobotiqSdkVersion.cmake")
+
+# Every module's headers target links it.
+if(NOT TARGET robotiq_common_abi)
+  add_library(robotiq_common_abi INTERFACE)
+  string(REPLACE "." "_" _robotiq_common_abi "v${ROBOTIQ_SDK_VERSION}")
+  target_include_directories(robotiq_common_abi INTERFACE "${ROBOTIQ_SDK_ROOT}/common/include")
+  target_compile_definitions(robotiq_common_abi INTERFACE ROBOTIQ_COMMON_ABI=${_robotiq_common_abi})
+endif()
 
 function(robotiq_link_common target)
   foreach(module IN LISTS ARGN)
