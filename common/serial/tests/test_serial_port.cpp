@@ -225,7 +225,9 @@ TEST_F(PtySerialPort, ReadSomeRaisesWhenThePeerHangsUp)
 {
    _peer.hangUp();
 
-   EXPECT_THAT([&] { (void)readSome(64, 500ms); }, ThrowsMessage<SerialError>(HasSubstr("serial")));
+   EXPECT_THAT([&] { (void)readSome(64, 500ms); },
+               ThrowsMessage<SerialError>(
+                  AnyOf(HasSubstr("waiting for serial input"), HasSubstr("reading from the serial port"))));
 }
 
 TEST_F(PtySerialPort, WriteReachesThePeer)

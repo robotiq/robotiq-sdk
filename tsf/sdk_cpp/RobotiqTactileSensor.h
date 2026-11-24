@@ -176,7 +176,7 @@ private:
     std::mutex m_baselineMutex;
 
     // Version handoff with the read thread. m_versionMutex guards the fields
-    // below, but m_versionRequested.
+    // below, except m_versionRequested.
     std::mutex m_versionMutex;
     std::condition_variable m_versionCv;
     std::string m_firmwareVersion;

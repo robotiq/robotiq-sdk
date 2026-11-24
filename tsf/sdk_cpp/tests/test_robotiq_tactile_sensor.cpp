@@ -29,6 +29,9 @@ const std::string MISSING_PORT = "/dev/this_should_not_exist";
 
 const std::vector<uint8_t> GET_VERSION = {0x9A, 0x00, 0xE3, 0x00};
 
+// Beyond the tests' 10 s caps: a query that waits it out fails them.
+const unsigned int LONG_QUERY_MS = 30000;
+
 std::vector<uint8_t> autosend(uint8_t period_ms)
 {
     return {0x9A, 0x00, 0x58, 0x01, period_ms};
@@ -93,18 +96,20 @@ protected:
         g_temperature = 0;
     }
 
-    void connect(unsigned int period_ms = 1)
-    {
-        m_sdk.reset(new RobotiqTactileSensor(m_hub.slavePath().c_str(), onSample, period_ms));
-        ASSERT_TRUE(m_sdk->isConnected()) << m_sdk->getLastError();
-        ASSERT_EQ(m_hub.receive(5), autosend(static_cast<uint8_t>(period_ms)));
-    }
-
     // A macOS pty holds what the SDK writes until the hub reads it: a
-    // request left unread fails its drain.
+    // request left unread fails its drain. So the hub reads before the SDK
+    // sends.
     std::future<std::vector<uint8_t> > hubReceiveAsync(size_t size)
     {
         return std::async(std::launch::async, [this, size] { return m_hub.receive(size); });
+    }
+
+    void connect(unsigned int period_ms = 1)
+    {
+        std::future<std::vector<uint8_t> > startFrame = hubReceiveAsync(5);
+        m_sdk.reset(new RobotiqTactileSensor(m_hub.slavePath().c_str(), onSample, period_ms));
+        ASSERT_TRUE(m_sdk->isConnected()) << m_sdk->getLastError();
+        ASSERT_EQ(startFrame.get(), autosend(static_cast<uint8_t>(period_ms)));
     }
 
     PtyPeer m_hub;
@@ -140,15 +145,27 @@ TEST_F(TactileSensorOverPty, ReadsTheFirmwareVersion)
     connect();
 
     std::string version;
+    std::future<std::vector<uint8_t> > request = hubReceiveAsync(GET_VERSION.size());
     std::future<bool> answered = std::async(std::launch::async, [&] {
         return m_sdk->getFirmwareVersion(version);
     });
-    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
+    ASSERT_EQ(request.get(), GET_VERSION);
     ASSERT_TRUE(m_hub.send(versionReply("2.3.1")));
 
     EXPECT_TRUE(answered.get()) << m_sdk->getLastError();
     EXPECT_EQ(version, "2.3.1");
 }
+
+#ifdef __APPLE__
+// Only a macOS pty holds the start command until the hub reads it.
+TEST_F(TactileSensorOverPty, AStartCommandTheSensorDoesNotTakeLosesIt)
+{
+    m_sdk.reset(new RobotiqTactileSensor(m_hub.slavePath().c_str(), onSample));
+
+    EXPECT_TRUE(waitFor([this] { return !m_sdk->isConnected(); }));
+    EXPECT_STREQ(m_sdk->getLastError(), "Connection lost: the sensor did not take the start command");
+}
+#endif
 
 TEST_F(TactileSensorOverPty, LosingTheSensorDisconnectsAndReportsWhy)
 {
@@ -178,15 +195,18 @@ TEST_F(TactileSensorOverPty, AFirmwareVersionQueryEndsWhenTheSensorIsLost)
     connect();
 
     std::string version;
+    std::future<std::vector<uint8_t> > request = hubReceiveAsync(GET_VERSION.size());
     std::future<bool> answered = std::async(std::launch::async, [&] {
-        return m_sdk->getFirmwareVersion(version, 10000);
+        return m_sdk->getFirmwareVersion(version, LONG_QUERY_MS);
     });
-    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
+    ASSERT_EQ(request.get(), GET_VERSION);
     m_hub.hangUp();
 
     ASSERT_EQ(answered.wait_for(10s), std::future_status::ready);
     EXPECT_FALSE(answered.get());
     EXPECT_FALSE(m_sdk->isConnected());
+    EXPECT_EQ(std::string(m_sdk->getLastError()).rfind("Connection lost: ", 0), 0U)
+        << m_sdk->getLastError();
 }
 
 TEST_F(TactileSensorOverPty, AFirmwareVersionQueryNeedsCollectionRunning)
@@ -210,7 +230,7 @@ TEST_F(TactileSensorOverPty, AFirmwareVersionQueryTimesOutWithoutAReply)
     EXPECT_EQ(request.get(), GET_VERSION);
 }
 
-TEST_F(TactileSensorOverPty, ALateFirmwareVersionReplyIsNotServedToTheNextQuery)
+TEST_F(TactileSensorOverPty, AReplyLeftFromATimedOutQueryIsDroppedBeforeTheNextQuery)
 {
     connect();
     std::string version;
@@ -235,14 +255,12 @@ TEST_F(TactileSensorOverPty, StopEndsAWaitingFirmwareVersionQuery)
     connect();
 
     std::string version;
+    std::future<std::vector<uint8_t> > request = hubReceiveAsync(GET_VERSION.size());
     std::future<bool> answered = std::async(std::launch::async, [&] {
-        return m_sdk->getFirmwareVersion(version, 10000);
+        return m_sdk->getFirmwareVersion(version, LONG_QUERY_MS);
     });
-    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
-    // A macOS pty holds the stop frame until the hub reads it.
-    std::future<std::vector<uint8_t> > stopFrame = std::async(std::launch::async, [this] {
-        return m_hub.receive(5);
-    });
+    ASSERT_EQ(request.get(), GET_VERSION);
+    std::future<std::vector<uint8_t> > stopFrame = hubReceiveAsync(5);
     m_sdk->stop();
 
     ASSERT_EQ(answered.wait_for(10s), std::future_status::ready);
@@ -254,24 +272,24 @@ TEST_F(TactileSensorOverPty, StopEndsAWaitingFirmwareVersionQuery)
 TEST_F(TactileSensorOverPty, RestartsAfterStop)
 {
     connect(5);
-    std::future<std::vector<uint8_t> > stopFrame = std::async(std::launch::async, [this] {
-        return m_hub.receive(5);
-    });
+    std::future<std::vector<uint8_t> > stopFrame = hubReceiveAsync(5);
     m_sdk->stop();
     ASSERT_EQ(stopFrame.get(), autosend(0));
 
+    std::future<std::vector<uint8_t> > startFrame = hubReceiveAsync(5);
     m_sdk->start();
 
-    ASSERT_EQ(m_hub.receive(5), autosend(5));
+    ASSERT_EQ(startFrame.get(), autosend(5));
     ASSERT_TRUE(m_hub.send(temperature(0x0042)));
     EXPECT_TRUE(waitFor([] { return g_samples > 0; }));
     EXPECT_EQ(g_temperature, 0x0042);
 
     std::string version;
+    std::future<std::vector<uint8_t> > request = hubReceiveAsync(GET_VERSION.size());
     std::future<bool> answered = std::async(std::launch::async, [&] {
         return m_sdk->getFirmwareVersion(version);
     });
-    ASSERT_EQ(m_hub.receive(GET_VERSION.size()), GET_VERSION);
+    ASSERT_EQ(request.get(), GET_VERSION);
     ASSERT_TRUE(m_hub.send(versionReply("2.3.1")));
     EXPECT_TRUE(answered.get()) << m_sdk->getLastError();
     EXPECT_EQ(version, "2.3.1");
@@ -282,10 +300,13 @@ TEST_F(TactileSensorOverPty, ReassemblesAFrameSplitAcrossReads)
     connect();
     const std::vector<uint8_t> frame = temperature(0x0123);
 
-    // Repeated so some rounds split the frame across reads.
     for (int round = 1; round <= 16; ++round)
     {
         ASSERT_TRUE(m_hub.send(std::vector<uint8_t>(frame.begin(), frame.begin() + 3)));
+        // Lets the read thread take the first half alone, as it mostly
+        // does. The test passes either way: the pause only sets how many
+        // rounds split.
+        std::this_thread::sleep_for(5ms);
         ASSERT_TRUE(m_hub.send(std::vector<uint8_t>(frame.begin() + 3, frame.end())));
         ASSERT_TRUE(waitFor([round] { return g_samples == round; }));
     }

@@ -334,8 +334,11 @@ void RobotiqTactileSensor::start()
         return;
 
     // The old thread's stop command goes out before the new start command.
+    // It can lose the sensor meanwhile.
     if (m_thread.joinable())
         m_thread.join();
+    if (!m_connected)
+        return;
     {
         std::lock_guard<std::mutex> lk(m_versionMutex);
         m_collecting = true;
@@ -493,8 +496,11 @@ void RobotiqTactileSensor::threadLoop()
     {
         // Closed so a re-plugged sensor gets its name back.
         m_port->close();
-        m_portError = std::string("Connection lost: ") + error.what();
-        m_portLost = true;
+        if (!m_portLost)
+        {
+            m_portError = std::string("Connection lost: ") + error.what();
+            m_portLost = true;
+        }
         m_dataRate = 0;
         m_connected = false;
         m_running = false;
