@@ -27,6 +27,12 @@ inline std::chrono::steady_clock::time_point deadlineAfter(std::chrono::millisec
    return steady_clock::now() + std::min(timeout, longest);
 }
 
+inline std::chrono::milliseconds remainingUntil(std::chrono::steady_clock::time_point deadline)
+{
+   const auto now = std::chrono::steady_clock::now();
+   return deadline > now ? std::chrono::ceil<std::chrono::milliseconds>(deadline - now) : std::chrono::milliseconds(0);
+}
+
 template <typename Predicate>
 std::optional<StampedExchange> waitForExchangeAfter(const Gripper& gripper,
                                                     uint64_t afterCount,
@@ -37,10 +43,7 @@ std::optional<StampedExchange> waitForExchangeAfter(const Gripper& gripper,
    uint64_t desired = afterCount + 1;
    while(true)
    {
-      const auto now = std::chrono::steady_clock::now();
-      const auto remaining =
-         deadline > now ? std::chrono::ceil<std::chrono::milliseconds>(deadline - now) : std::chrono::milliseconds(0);
-      std::optional<StampedExchange> exchange = gripper.waitForExchangeCount(desired, remaining);
+      std::optional<StampedExchange> exchange = gripper.waitForExchangeCount(desired, remainingUntil(deadline));
       if(!exchange || predicate(std::as_const(*exchange)))
       {
          return exchange;
