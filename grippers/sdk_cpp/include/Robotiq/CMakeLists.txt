@@ -26,6 +26,8 @@ target_sources(grippers_objects PRIVATE
   detail/modbus_constants.hpp
   detail/byte_packing.hpp
   detail/throttle.hpp
+  detail/control.hpp
+  detail/motion_outcome.hpp
   detail/default_logger.hpp
   detail/default_serial.hpp
   # Shims for the v1.0.0 paths; removed in the next major.

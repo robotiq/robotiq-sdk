@@ -103,12 +103,6 @@ namespace {
 // shows it, and judges the status of that exchange rather than a status
 // read afterwards.
 
-std::chrono::milliseconds remaining(std::chrono::steady_clock::time_point deadline)
-{
-   const auto now = std::chrono::steady_clock::now();
-   return deadline > now ? std::chrono::ceil<std::chrono::milliseconds>(deadline - now) : std::chrono::milliseconds(0);
-}
-
 template <typename Predicate>
 std::optional<StampedExchange> waitForStatus(const Gripper& gripper,
                                              Predicate predicate,
@@ -117,7 +111,7 @@ std::optional<StampedExchange> waitForStatus(const Gripper& gripper,
    return waitFor(
       gripper,
       [&](const StampedExchange& exchange) { return predicate(exchange.status); },
-      remaining(deadline));
+      detail::remainingUntil(deadline));
 }
 
 // The exchange cycle must be delivering fresh status before a procedure

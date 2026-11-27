@@ -1,5 +1,6 @@
 target_sources(grippers_objects PRIVATE
   gripper.cpp
+  control.cpp
   gripper_state.hpp
   gripper_state.cpp
   process_image.hpp

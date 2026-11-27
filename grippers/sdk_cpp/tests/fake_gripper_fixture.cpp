@@ -50,6 +50,31 @@ void InstrumentedRegisterModel::setActivationHighButIncomplete()
    _activationDone = false;
 }
 
+void InstrumentedRegisterModel::setObjectAt(uint8_t position)
+{
+   _objectAt = position;
+}
+
+void InstrumentedRegisterModel::setOpeningBlockedAt(uint8_t position)
+{
+   _openingBlockedAt = position;
+}
+
+void InstrumentedRegisterModel::setNeverArrives()
+{
+   _neverArrives = true;
+}
+
+void InstrumentedRegisterModel::setMotionLag(int exchanges)
+{
+   _motionLag = exchanges;
+}
+
+void InstrumentedRegisterModel::setEchoLag(int exchanges)
+{
+   _echoLag = exchanges;
+}
+
 void InstrumentedRegisterModel::read(uint16_t address, uint16_t quantity, uint16_t* out) const
 {
    statusReads.fetch_add(1);
@@ -74,6 +99,72 @@ GripperStatus InstrumentedRegisterModel::processCommand(const GripperCommand& co
    // The model runs even while pinned: it is what tracks the rACT edge, so
    // skipping it would leave a stale edge behind once the pin is released.
    const GripperStatus modelled = RegisterModel::processCommand(command, currentStatus);
-   return pinnedStatus ? *pinnedStatus : modelled;
+   if(pinnedStatus)
+   {
+      return *pinnedStatus;
+   }
+   return modelled.gripperStatus.goToEnabled() ? withStagedMotion(modelled, currentStatus) : modelled;
+}
+
+void InstrumentedRegisterModel::countExchangesSinceRequest(uint8_t positionRequest)
+{
+   if(_latestRequest != positionRequest)
+   {
+      _latestRequest = positionRequest;
+      _exchangesSinceRequest = 0;
+   }
+   else if(_exchangesSinceRequest < kExchangeCountCeiling)
+   {
+      ++_exchangesSinceRequest;
+   }
+}
+
+GripperStatus InstrumentedRegisterModel::withStagedMotion(const GripperStatus& modelled,
+                                                          const GripperStatus& currentStatus)
+{
+   countExchangesSinceRequest(modelled.positionRequestEcho);
+   if(_exchangesSinceRequest < _echoLag)
+   {
+      return currentStatus;
+   }
+
+   const GripperStatus atRest = withObstacles(modelled, currentStatus);
+   const int startsMovingAfter = _motionLag;
+   const int stopsMovingAfter = 2 * startsMovingAfter;
+   if(_exchangesSinceRequest >= stopsMovingAfter)
+   {
+      return atRest;
+   }
+
+   const bool hasStartedMoving = _exchangesSinceRequest >= startsMovingAfter;
+   GripperStatus inTransit = atRest;
+   inTransit.position = currentStatus.position;
+   fake::setObjectDetection(inTransit,
+                            hasStartedMoving ? ObjectDetection::Moving : currentStatus.gripperStatus.objectDetection());
+   return inTransit;
+}
+
+GripperStatus InstrumentedRegisterModel::withObstacles(const GripperStatus& modelled,
+                                                       const GripperStatus& currentStatus) const
+{
+   GripperStatus obstructed = modelled;
+   const int objectAt = _objectAt;
+   const int openingBlockedAt = _openingBlockedAt;
+   if(_neverArrives)
+   {
+      fake::setObjectDetection(obstructed, ObjectDetection::Moving);
+      obstructed.position = currentStatus.position;
+   }
+   else if(objectAt != kNoObstacle && modelled.position > objectAt)
+   {
+      fake::setObjectDetection(obstructed, ObjectDetection::DetectedWhileClosing);
+      obstructed.position = static_cast<uint8_t>(objectAt);
+   }
+   else if(openingBlockedAt != kNoObstacle && modelled.position < openingBlockedAt)
+   {
+      fake::setObjectDetection(obstructed, ObjectDetection::DetectedWhileOpening);
+      obstructed.position = static_cast<uint8_t>(openingBlockedAt);
+   }
+   return obstructed;
 }
 } // namespace Robotiq::test
