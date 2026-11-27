@@ -153,6 +153,11 @@ private:
 };
 
 //! \ingroup activation
+//! How long activate() and recoverFromFault() wait for the activation
+//! handshake unless told otherwise.
+inline constexpr std::chrono::seconds kDefaultActivationTimeout{15};
+
+//! \ingroup activation
 //! \brief Ensure the gripper is activated, blocking until it reports completion.
 //!
 //! A healthy, already-activated gripper is left undisturbed, and an
@@ -164,7 +169,7 @@ private:
 //!
 //! \par Example
 //! \snippet gripper_events.cpp activation-recovery
-ActivationResult activate(Gripper& gripper, std::chrono::milliseconds timeout = std::chrono::seconds(15));
+ActivationResult activate(Gripper& gripper, std::chrono::milliseconds timeout = kDefaultActivationTimeout);
 
 //! \ingroup activation
 //! \brief Run the manual's fault-recovery handshake, unconditionally.
@@ -176,7 +181,7 @@ ActivationResult activate(Gripper& gripper, std::chrono::milliseconds timeout = 
 //! \param gripper The gripper to recover.
 //! \param timeout How long to wait for the handshake to complete.
 //! \return Activated on success; Timeout if completion never arrived in time.
-ActivationResult recoverFromFault(Gripper& gripper, std::chrono::milliseconds timeout = std::chrono::seconds(15));
+ActivationResult recoverFromFault(Gripper& gripper, std::chrono::milliseconds timeout = kDefaultActivationTimeout);
 } // namespace Robotiq
 
 // Last, because wait.hpp's templates need the complete Gripper; included at

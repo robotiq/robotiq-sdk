@@ -33,6 +33,7 @@ if(GRIPPERS_BUILD_FAKE)
     test_wait_for_exchange.cpp
     test_fake_gripper_server.cpp
     test_make_fake_gripper.cpp
+    test_control.cpp
   )
 endif()
 target_link_libraries(grippers_tests PRIVATE

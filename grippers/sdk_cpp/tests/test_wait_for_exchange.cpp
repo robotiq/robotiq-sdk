@@ -24,37 +24,6 @@
 
 namespace Robotiq::test {
 namespace {
-constexpr std::chrono::seconds kWait{2};
-
-// Returned as a prvalue: Gripper is neither copyable nor movable, and C++17's
-// guaranteed elision is what lets a factory hand one back by value anyway.
-Gripper makeGripper(InstrumentedFakeGripperServer& fakeServer,
-                    std::chrono::milliseconds period,
-                    std::shared_ptr<Platform> platform = makeDefaultPlatform())
-{
-   return Gripper(std::make_unique<fake::GripperSerial>(fakeServer.server),
-                  kSlaveAddress,
-                  period,
-                  std::move(platform),
-                  std::make_shared<NullLogger>());
-}
-
-//! A gripper whose link has already failed for good: no exchange will ever
-//! complete again, so nothing but the stop can end a wait on it.
-std::unique_ptr<Gripper> makeStalledGripper(InstrumentedFakeGripperServer& fakeServer)
-{
-   auto serial = std::make_unique<WriteFailingSerial>(fakeServer.server);
-   WriteFailingSerial& link = *serial;
-   auto gripper = std::make_unique<Gripper>(std::move(serial),
-                                            kSlaveAddress,
-                                            kFastPeriod,
-                                            makeDefaultPlatform(),
-                                            std::make_shared<NullLogger>());
-   link.failing.store(true);
-   EXPECT_TRUE(pollFor([&] { return gripper->connectionState() == ConnectionState::Faulted; }, kWait));
-   return gripper;
-}
-
 class TestWaitForExchange : public ::testing::Test
 {
 protected:

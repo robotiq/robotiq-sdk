@@ -63,11 +63,50 @@ public:
    //! thread and the caller gets there first decides what activate() sees.
    void setActivationHighButIncomplete();
 
+   //! An object sits between the fingers at \p position: a motion asked to
+   //! close past it stops there and reports DetectedWhileClosing.
+   void setObjectAt(uint8_t position);
+
+   //! Something blocks the fingers at \p position on their way open: a motion
+   //! asked to open past it stops there and reports DetectedWhileOpening.
+   void setOpeningBlockedAt(uint8_t position);
+
+   //! The fingers never stop: every motion keeps reporting Moving, from
+   //! wherever they were. Overrides setObjectAt() and setOpeningBlockedAt().
+   void setNeverArrives();
+
+   //! A new position request takes time to show, as on a real gripper: for
+   //! \p exchanges exchanges the status still holds the previous position
+   //! and object detection, then reports Moving for as many, then arrives.
+   void setMotionLag(int exchanges);
+
+   //! The gripper is slow to take a new position request into account: for
+   //! \p exchanges exchanges the status does not change at all, so the
+   //! request is not echoed yet.
+   void setEchoLag(int exchanges);
+
    void read(uint16_t address, uint16_t quantity, uint16_t* out) const override;
    void write(uint16_t address, uint16_t quantity, const uint16_t* values) override;
 
 protected:
    GripperStatus processCommand(const GripperCommand& command, const GripperStatus& currentStatus) override;
+
+private:
+   void countExchangesSinceRequest(uint8_t positionRequest);
+   GripperStatus withStagedMotion(const GripperStatus& modelled, const GripperStatus& currentStatus);
+   GripperStatus withObstacles(const GripperStatus& modelled, const GripperStatus& currentStatus) const;
+
+   static constexpr int kNoObstacle = -1;
+   static constexpr int kExchangeCountCeiling = 1 << 20;
+
+   std::atomic<int> _objectAt{kNoObstacle};
+   std::atomic<int> _openingBlockedAt{kNoObstacle};
+   std::atomic<bool> _neverArrives{false};
+   std::atomic<int> _motionLag{0};
+   std::atomic<int> _echoLag{0};
+
+   std::optional<uint8_t> _latestRequest;
+   int _exchangesSinceRequest = 0;
 };
 
 //! An instrumented model and the Modbus server in front of it, as one object,

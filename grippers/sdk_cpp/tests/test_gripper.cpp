@@ -35,8 +35,6 @@ namespace Robotiq::test {
 namespace {
 namespace mc = Robotiq::detail::modbus_constants;
 
-constexpr std::chrono::seconds kWait{2};
-
 GripperCommand activateCommand()
 {
    GripperCommand command;
